@@ -209,6 +209,23 @@
     .pv-table tr { page-break-inside: avoid; break-inside: avoid; }
   }
 
+  /* 画像（アプリ版のみ） */
+  .photo-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -2px 0 10px; }
+  .photo-btn { font-size: .78rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 7px 12px; }
+  .photo-btn:disabled { opacity: .45; cursor: default; }
+  .thumb { position: relative; width: 4.4rem; height: 4.4rem; border-radius: 10px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); flex: none; padding: 0; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .rm { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.62); color: #fff; font-size: 12px; line-height: 22px; padding: 0; }
+  .thumb.loading::after { content: "…"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; }
+  .entry-images { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+  .entry-images .thumb { cursor: zoom-in; }
+  .image-note { font-size: .74rem; color: var(--muted); margin: -4px 0 10px; }
+  .viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; padding: 12px; }
+  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 20px; padding: 0; }
+  .viewer-msg { position: absolute; color: #fff; font-size: .9rem; }
+  @media print { .entry-images, .image-note, .viewer, .photo-row { display: none !important; } }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -323,6 +340,10 @@
     </div>
     <label class="hint" for="contentInput">内容</label>
     <textarea id="contentInput" placeholder="例）居室にて体温測定 36.4℃。食欲あり、昼食は全量摂取。"></textarea>
+    <div class="photo-row" id="photoRow" hidden>
+      <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
+      <input type="file" id="photoInput" accept="image/*" multiple hidden>
+    </div>
     <div class="compose-actions">
       <button class="btn-primary" id="submitBtn">記録する</button>
     </div>
@@ -363,12 +384,23 @@
   <div id="printView"></div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="viewer" id="viewer" role="dialog" aria-label="画像の拡大表示" hidden>
+  <p class="viewer-msg" id="viewerMsg"></p>
+  <img id="viewerImg" alt="">
+  <button type="button" class="viewer-close" id="viewerClose" aria-label="閉じる">✕</button>
+</div>
 
 <script>
 (function () {
   var STORE_KEY = 'srn.v1';
   var POLL_INTERVAL_MS = 20000;
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
+  // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
+  var ENABLE_IMAGES = true;
+  var MAX_IMAGES = 4;
+  var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
+  var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
+  var UPLOAD_TIMEOUT_MS = 90000;
 
   var me = null;          // { email, staffName }
   var viewDateKey = null; // 画面に表示している日付（端末の現在日付）
@@ -434,6 +466,13 @@
     printView: document.getElementById('printView'),
     toast: document.getElementById('toast'),
     nowBtn: document.getElementById('nowBtn'),
+    photoRow: document.getElementById('photoRow'),
+    photoBtn: document.getElementById('photoBtn'),
+    photoInput: document.getElementById('photoInput'),
+    viewer: document.getElementById('viewer'),
+    viewerImg: document.getElementById('viewerImg'),
+    viewerMsg: document.getElementById('viewerMsg'),
+    viewerClose: document.getElementById('viewerClose'),
     timeModeBtn: document.getElementById('timeModeBtn')
   };
 
@@ -693,7 +732,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -702,6 +741,7 @@
     var body = { action: FN_TO_ACTION[fnName], token: token };
     if (fnName === 'getBootstrap' || fnName === 'getRecords') body.dateKey = args;
     else if (fnName === 'searchRecords') body.query = args;
+    else if (fnName === 'uploadImage' || fnName === 'getImage') Object.assign(body, args);
     else body.payload = args;
     return apiPost(body, timeoutMs).then(function (res) {
       if (fnName === 'getRecords') return res.records || [];
@@ -849,6 +889,7 @@
 
     initFontSize();
     initTimeMode();
+    initImages();
     updateDateUI();
     el.prevDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, -1), true); });
     el.nextDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, 1), true); });
@@ -1044,9 +1085,12 @@
         target: el.targetSelect.value,
         content: content,
         time: time,
-        transcribed: false
+        transcribed: false,
+        images: composeImages.slice()
       }
     };
+    composeImages = [];
+    if (ENABLE_IMAGES) renderComposeImages();
     queue.push(op);
     persistStore();
 
@@ -1082,15 +1126,19 @@
   }
 
   /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
-  function requestUpdate(item, newTime, newTarget, newContent) {
+  /** newImages を渡したときだけ画像も差し替える（Googleログイン版では渡さないので、画像はそのまま） */
+  function requestUpdate(item, newTime, newTarget, newContent, newImages) {
+    var payload = {
+      id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
+      base: { time: item.time, target: item.target, content: item.content }
+    };
+    if (newImages) payload.images = newImages;
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
       addOp.payload.time = newTime;
       addOp.payload.target = newTarget;
       addOp.payload.content = newContent;
-    }, 'update', {
-      id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
-      base: { time: item.time, target: item.target, content: item.content }
-    });
+      if (newImages) addOp.payload.images = newImages;
+    }, 'update', payload);
   }
 
   function requestDelete(item) {
@@ -1098,6 +1146,7 @@
     if (addIdx !== -1 && !queue[addIdx].sent) {
       // まだ送信していない自分の追加は、その追加ごと取り消す（この記録に対する後続の操作も不要になる）
       var tempId = queue[addIdx].tempId;
+      forgetLocalImages(queue[addIdx].payload.images);
       queue = queue.filter(function (q) { return q.tempId !== tempId && q.id !== tempId; });
       persistStore();
       render();
@@ -1116,6 +1165,262 @@
     }, 'toggle', { id: item.id, dateKey: item.dateKey, value: checked });
   }
 
+  // ---------- 画像（アプリ版） ----------
+  // 画像の形：送信済み { id, thumb }（Drive のファイルID）／未送信 { cid }（端末内の一時保存）
+  // 未送信の画像は IndexedDB に一時保存し、送れたら消す。表示用の画像は端末に保存せず、開いている間だけ覚える。
+
+  var composeImages = [];  // 入力中の新しい記録に付ける画像 [{ cid }]
+  var imageUrlCache = {};  // 画像ID → 表示用 data URL（画面を開いている間だけ）
+  var memImages = {};      // IndexedDB が使えない環境の予備（再読み込みで消える）
+  var idbPromise = null;
+
+  function idb() {
+    if (!idbPromise) {
+      idbPromise = new Promise(function (resolve, reject) {
+        if (!window.indexedDB) { reject(new Error('no indexedDB')); return; }
+        var r = indexedDB.open('srn-images', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('pending', { keyPath: 'cid' }); };
+        r.onsuccess = function () { resolve(r.result); };
+        r.onerror = function () { reject(r.error); };
+      });
+    }
+    return idbPromise;
+  }
+  function idbPut(obj) {
+    return idb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('pending', 'readwrite');
+        tx.objectStore('pending').put(obj);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    }).catch(function () { memImages[obj.cid] = obj; });
+  }
+  function idbGet(cid) {
+    return idb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var r = db.transaction('pending').objectStore('pending').get(cid);
+        r.onsuccess = function () { resolve(r.result || memImages[cid] || null); };
+        r.onerror = function () { reject(r.error); };
+      });
+    }).catch(function () { return memImages[cid] || null; });
+  }
+  function idbDelete(cid) {
+    delete memImages[cid];
+    return idb().then(function (db) {
+      return new Promise(function (resolve) {
+        var tx = db.transaction('pending', 'readwrite');
+        tx.objectStore('pending').delete(cid);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      });
+    }).catch(function () { /* 無視 */ });
+  }
+  function forgetLocalImages(images) {
+    (images || []).forEach(function (img) { if (img && img.cid) idbDelete(img.cid); });
+  }
+
+  function loadImageFile(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { resolve({ img: img, url: url }); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('この画像は読み込めませんでした（形式に対応していない可能性があります）。')); };
+      img.src = url;
+    });
+  }
+
+  /** 縮小してJPEGにする（描き直すので、撮影場所などの付加情報は含まれない） */
+  function encodeImage(img, maxSide, quality) {
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var scale = Math.min(1, maxSide / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * scale));
+    c.height = Math.max(1, Math.round(h * scale));
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality).split(',')[1];
+  }
+
+  function prepareImage(file, dateKey) {
+    return loadImageFile(file).then(function (r) {
+      var obj = {
+        cid: 'img-' + uid(), dateKey: dateKey,
+        data: encodeImage(r.img, IMAGE_MAX_SIDE, 0.75), thumb: encodeImage(r.img, THUMB_SIDE, 0.7)
+      };
+      URL.revokeObjectURL(r.url);
+      return idbPut(obj).then(function () { return obj; });
+    });
+  }
+
+  /** 同時に取りに行く画像の数を3つまでに抑える */
+  var imgActive = 0, imgWaiting = [];
+  function throttled(fn) {
+    return new Promise(function (resolve, reject) {
+      function run() {
+        imgActive++;
+        fn().then(resolve, reject).then(done, done);
+      }
+      function done() {
+        imgActive--;
+        var next = imgWaiting.shift();
+        if (next) next();
+      }
+      if (imgActive < 3) run(); else imgWaiting.push(run);
+    });
+  }
+
+  /** 送信済みの画像を受付窓口から取る（端末には保存しない） */
+  function fetchImageUrl(fileId) {
+    if (imageUrlCache[fileId]) return Promise.resolve(imageUrlCache[fileId]);
+    return throttled(function () {
+      return callServer('getImage', { id: fileId }, 60000).then(function (res) {
+        var url = 'data:' + (res.mime || 'image/jpeg') + ';base64,' + res.data;
+        imageUrlCache[fileId] = url;
+        return url;
+      });
+    });
+  }
+
+  /** 一覧用の縮小画像の URL（未送信なら端末内、送信済みなら受付窓口から） */
+  function thumbUrlOf(img) {
+    if (img.cid && !img.id) {
+      return idbGet(img.cid).then(function (o) { return o ? 'data:image/jpeg;base64,' + o.thumb : null; });
+    }
+    return fetchImageUrl(img.thumb || img.id);
+  }
+
+  function fullUrlOf(img) {
+    if (img.cid && !img.id) {
+      return idbGet(img.cid).then(function (o) { return o ? 'data:image/jpeg;base64,' + o.data : null; });
+    }
+    return fetchImageUrl(img.id);
+  }
+
+  /** 縮小画像1枚の要素を作る。onRemove を渡すと「✕」で外せる（入力・編集用） */
+  function makeThumb(img, onRemove) {
+    var box = document.createElement(onRemove ? 'div' : 'button');
+    if (!onRemove) box.type = 'button';
+    box.className = 'thumb loading';
+    thumbUrlOf(img).then(function (url) {
+      box.classList.remove('loading');
+      if (!url) return;
+      var im = document.createElement('img');
+      im.alt = '記録の画像';
+      im.src = url;
+      box.insertBefore(im, box.firstChild);
+    }).catch(function () { box.classList.remove('loading'); box.title = '画像を読み込めませんでした'; });
+    if (onRemove) {
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'rm';
+      rm.setAttribute('aria-label', 'この画像を外す');
+      rm.textContent = '✕';
+      rm.addEventListener('click', onRemove);
+      box.appendChild(rm);
+    } else {
+      box.addEventListener('click', function () { openViewer(img); });
+    }
+    return box;
+  }
+
+  function openViewer(img) {
+    el.viewerImg.removeAttribute('src');
+    el.viewerMsg.textContent = '読み込み中…';
+    el.viewer.hidden = false;
+    fullUrlOf(img).then(function (url) {
+      if (el.viewer.hidden) return;
+      el.viewerMsg.textContent = url ? '' : '画像が見つかりませんでした。';
+      if (url) el.viewerImg.src = url;
+    }).catch(function () {
+      el.viewerMsg.textContent = '画像を読み込めませんでした。電波の良い場所でもう一度お試しください。';
+    });
+  }
+
+  function closeViewer() {
+    el.viewer.hidden = true;
+    el.viewerImg.removeAttribute('src');
+  }
+
+  /** 写真を選ぶボタンと、選んだ画像の並びを用意する。getList/setList で対象の画像リストを読み書きする */
+  function setupPhotoPicker(btn, input, row, getList, onChange) {
+    btn.addEventListener('click', function () {
+      if (getList().length >= MAX_IMAGES) { showError('画像は1件の記録につき' + MAX_IMAGES + '枚までです。'); return; }
+      input.click();
+    });
+    input.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(input.files || []);
+      input.value = '';
+      var room = MAX_IMAGES - getList().length;
+      if (files.length > room) showError('画像は1件の記録につき' + MAX_IMAGES + '枚までです。先頭の' + Math.max(room, 0) + '枚を追加します。');
+      files = files.slice(0, Math.max(room, 0));
+      if (!files.length) return;
+      btn.disabled = true;
+      var label = btn.textContent;
+      btn.textContent = '処理中…';
+      files.reduce(function (p, f) {
+        return p.then(function () {
+          return prepareImage(f, viewDateKey).then(function (obj) {
+            getList().push({ cid: obj.cid });
+            onChange();
+          }).catch(function (e) { showError(e.message); });
+        });
+      }, Promise.resolve()).then(function () {
+        btn.disabled = false;
+        btn.textContent = label;
+      });
+    });
+  }
+
+  function renderImageList(row, btn, list, onRemoved) {
+    Array.prototype.slice.call(row.querySelectorAll('.thumb')).forEach(function (t) { t.remove(); });
+    list.forEach(function (img, i) {
+      row.insertBefore(makeThumb(img, function () {
+        var removed = list.splice(i, 1)[0];
+        if (removed && removed.cid && !removed.id && onRemoved) onRemoved(removed);
+        renderImageList(row, btn, list, onRemoved);
+      }), btn);
+    });
+    btn.hidden = list.length >= MAX_IMAGES;
+  }
+
+  function renderComposeImages() {
+    renderImageList(el.photoRow, el.photoBtn, composeImages, function (removed) { idbDelete(removed.cid); });
+  }
+
+  function initImages() {
+    if (!ENABLE_IMAGES) return;
+    el.photoRow.hidden = false;
+    setupPhotoPicker(el.photoBtn, el.photoInput, el.photoRow, function () { return composeImages; }, renderComposeImages);
+    el.viewerClose.addEventListener('click', closeViewer);
+    el.viewer.addEventListener('click', function (e) { if (e.target === el.viewer) closeViewer(); });
+  }
+
+  /** 送信前に、未送信の画像（cid）を順に送り、送信済みの形 { id, thumb } に置き換える */
+  function uploadPendingImages(op) {
+    var list = (op.payload && op.payload.images) || [];
+    var i = -1;
+    for (var k = 0; k < list.length; k++) { if (list[k] && list[k].cid && !list[k].id) { i = k; break; } }
+    if (i === -1) return Promise.resolve();
+    var item = list[i];
+    return idbGet(item.cid).then(function (obj) {
+      if (!obj) { list.splice(i, 1); persistStore(); return uploadPendingImages(op); } // 端末から消えていた画像は外す
+      return callServer('uploadImage', { dateKey: obj.dateKey, clientImageId: obj.cid, data: obj.data, thumb: obj.thumb }, UPLOAD_TIMEOUT_MS)
+        .then(function (res) {
+          list[i] = { id: res.image.id, thumb: res.image.thumb, cid: item.cid };
+          imageUrlCache[res.image.thumb] = 'data:image/jpeg;base64,' + obj.thumb; // 一覧ですぐ表示できるよう覚えておく
+          persistStore();
+          return uploadPendingImages(op);
+        });
+    });
+  }
+
+  function sentImages(list) {
+    return (list || []).filter(function (x) { return x && x.id; }).map(function (x) { return { id: x.id, thumb: x.thumb || x.id }; });
+  }
+
   // ---------- 同期キュー ----------
 
   function flushQueue() {
@@ -1128,13 +1433,21 @@
     if (op.type === 'add') {
       // 一度でも送信した追加は、以後書き換えない（タイムアウト後にサーバーへ届いていた場合も、内容がずれないように）
       if (!op.sent) { op.sent = true; persistStore(); }
-      promise = callServer('addRecord', {
-        clientOpId: op.opId, dateKey: op.dateKey,
-        target: op.payload.target, content: op.payload.content, time: op.payload.time,
-        transcribed: !!op.payload.transcribed
+      promise = uploadPendingImages(op).then(function () {
+        var body = {
+          clientOpId: op.opId, dateKey: op.dateKey,
+          target: op.payload.target, content: op.payload.content, time: op.payload.time,
+          transcribed: !!op.payload.transcribed
+        };
+        if (op.payload.images && op.payload.images.length) body.images = sentImages(op.payload.images);
+        return callServer('addRecord', body);
       });
     } else if (op.type === 'update') {
-      promise = callServer('updateRecord', op.payload);
+      promise = uploadPendingImages(op).then(function () {
+        var body = Object.assign({}, op.payload);
+        if (body.images) body.images = sentImages(body.images);
+        return callServer('updateRecord', body);
+      });
     } else if (op.type === 'delete') {
       promise = callServer('deleteRecord', op.payload);
     } else if (op.type === 'toggle') {
@@ -1146,6 +1459,7 @@
     promise.then(function (res) {
       queue.shift();
       if (op.type === 'add' && res && res.id) rememberRealId(op.tempId, res.id);
+      if (op.payload) forgetLocalImages(op.payload.images); // 送り終えた画像は端末から消す
       flushing = false;
       persistStore();
       refreshFromServer();
@@ -1233,10 +1547,11 @@
           id: op.tempId, dateKey: op.dateKey, time: op.payload.time,
           staffName: me.staffName, staffColor: me.staffColor || '', staffEmail: me.email,
           target: op.payload.target, content: op.payload.content,
-          transcribed: !!op.payload.transcribed, canEdit: true, _pending: true
+          transcribed: !!op.payload.transcribed, images: op.payload.images || [], canEdit: true, _pending: true
         };
       } else if (op.type === 'update' && map[op.id]) {
         map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
+        if (op.payload.images) map[op.id].images = op.payload.images;
       } else if (op.type === 'delete') {
         delete map[op.id];
       } else if (op.type === 'toggle' && map[op.id]) {
@@ -1290,6 +1605,7 @@
         '<div class="entry-view">' +
           '<div class="entry-content" data-id="' + escapeHtml(String(item.id)) + '">' + escapeHtml(item.content) + '</div>' +
           '<button type="button" class="more-btn" hidden>続きを表示 ▼</button>' +
+          '<div class="entry-images" hidden></div>' +
           '<div class="entry-foot">' +
             '<label class="transcribe-label' + (item.transcribed ? ' done' : '') + '">' +
               '<input type="checkbox" class="transcribe-check"' + (item.transcribed ? ' checked' : '') + '> 福祉見聞録へ転記済み' +
@@ -1309,6 +1625,18 @@
       }
       requestToggle(item, checked);
     });
+
+    var imgs = item.images || [];
+    var imgBox = card.querySelector('.entry-images');
+    if (imgs.length && ENABLE_IMAGES) {
+      imgBox.hidden = false;
+      imgs.forEach(function (img) { imgBox.appendChild(makeThumb(img)); });
+    } else if (imgs.length) {
+      var note = document.createElement('p');
+      note.className = 'image-note';
+      note.textContent = '📷 画像' + imgs.length + '枚（アプリ版で見られます）';
+      imgBox.parentNode.insertBefore(note, imgBox);
+    }
 
     card.querySelector('.copy-btn').addEventListener('click', function () { copyText(String(item.content || '')); });
     card.querySelector('.more-btn').addEventListener('click', function () {
@@ -1339,6 +1667,7 @@
       item.time = values.time;
       item.target = values.target;
       item.content = values.content;
+      if (values.images) item.images = values.images;
       lastSearch.records.sort(function (a, b) {
         if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
         return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
@@ -1514,7 +1843,7 @@
         '<td>' + escapeHtml(r.time) + '</td>' +
         '<td>' + escapeHtml(r.target) + '</td>' +
         '<td>' + escapeHtml(r.staffName) + '</td>' +
-        '<td class="c">' + escapeHtml(r.content) + '</td>' +
+        '<td class="c">' + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') + '</td>' +
         '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
       '</tr>';
     }).join('');
@@ -1544,6 +1873,10 @@
           '<div><label class="hint">時刻</label><input type="time" class="edit-time" value="' + escapeHtml(item.time) + '"></div>' +
         '</div>' +
         '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
+        (ENABLE_IMAGES
+          ? '<div class="photo-row edit-photos"><button type="button" class="photo-btn edit-photo-btn">📷 写真を追加</button>' +
+            '<input type="file" class="edit-photo-input" accept="image/*" multiple hidden></div>'
+          : '') +
         '<div class="edit-actions">' +
           '<button class="op-btn cancel-btn">キャンセル</button>' +
           '<button class="op-btn save save-btn">保存</button>' +
@@ -1554,7 +1887,23 @@
     card.querySelector('.edit-target').value = item.target;
     applyTimeMode(card.querySelector('.edit-time'));
 
+    var editImages = null;
+    var addedInEdit = []; // この編集で新しく選んだ画像（キャンセルしたら端末から消す）
+    if (ENABLE_IMAGES) {
+      editImages = (item.images || []).slice();
+      var row = card.querySelector('.edit-photos');
+      var btn = card.querySelector('.edit-photo-btn');
+      var redraw = function () { renderImageList(row, btn, editImages, function (removed) { idbDelete(removed.cid); }); };
+      setupPhotoPicker(btn, card.querySelector('.edit-photo-input'), row, function () { return editImages; }, function () {
+        var last = editImages[editImages.length - 1];
+        if (last && last.cid) addedInEdit.push(last.cid);
+        redraw();
+      });
+      redraw();
+    }
+
     card.querySelector('.cancel-btn').addEventListener('click', function () {
+      addedInEdit.forEach(function (cid) { idbDelete(cid); });
       editingId = null;
       if (onClose) onClose(false, item); else render();
     });
@@ -1571,7 +1920,8 @@
       }
       var values = { time: time, target: card.querySelector('.edit-target').value, content: content };
       editingId = null;
-      requestUpdate(item, values.time, values.target, values.content); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      if (editImages) values.images = editImages;
+      requestUpdate(item, values.time, values.target, values.content, editImages || undefined); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
       if (onClose) onClose(true, item, values);
     });
   }
