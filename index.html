@@ -135,6 +135,7 @@
   .chip-pending { background: var(--pending-soft); color: var(--pending); }
   .entry-content { font-size: .92rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
   /* 長い記録は5行で折りたたむ（「続きを表示」で全文） */
+  .entry-content:empty { display: none; } /* 写真だけの記録 */
   .entry-content.clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
   .more-btn { display: block; background: none; color: var(--accent); font-size: .76rem; font-weight: 700; padding: 0; margin: -4px 0 10px; }
   /* 時刻：「今」ボタンと、入力方法（スクロール／直接入力）の切り替え */
@@ -1066,7 +1067,7 @@
 
   function onSubmit() {
     var content = el.contentInput.value.trim();
-    if (!content) { el.contentInput.focus(); return; }
+    if (!content && !composeImages.length) { el.contentInput.focus(); return; } // 写真だけの記録は本文なしで登録できる
     var time = readTimeInput(el.timeInput);
     if (!time) {
       el.timeInput.classList.add('invalid');
@@ -1909,7 +1910,7 @@
     });
     card.querySelector('.save-btn').addEventListener('click', function () {
       var content = card.querySelector('.edit-content').value.trim();
-      if (!content) return;
+      if (!content && !(editImages || item.images || []).length) return; // 写真が残っていれば本文なしでも保存できる
       var timeEl = card.querySelector('.edit-time');
       var time = readTimeInput(timeEl);
       if (!time) {
