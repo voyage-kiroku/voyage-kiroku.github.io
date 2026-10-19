@@ -222,9 +222,12 @@
   .entry-images .thumb { cursor: zoom-in; }
   .image-note { font-size: .74rem; color: var(--muted); margin: -4px 0 10px; }
   .viewer { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; padding: 12px; }
-  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer img { width: 100%; height: 100%; object-fit: contain; } /* 小さい写真も画面いっぱいに広げて先に見せる */
+  .viewer img.preview { filter: blur(1px); }
   .viewer-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 20px; padding: 0; }
   .viewer-msg { position: absolute; color: #fff; font-size: .9rem; }
+  .viewer-msg.bottom { bottom: 20px; max-width: calc(100% - 32px); text-align: center; background: rgba(0,0,0,.6); padding: 6px 14px; border-radius: 16px; }
+  .viewer-msg:empty { display: none; }
   @media print { .entry-images, .image-note, .viewer, .photo-row { display: none !important; } }
 
   /* ログイン画面（アプリ版） */
@@ -1305,9 +1308,11 @@
     var box = document.createElement(onRemove ? 'div' : 'button');
     if (!onRemove) box.type = 'button';
     box.className = 'thumb loading';
+    var thumbUrl = null;
     thumbUrlOf(img).then(function (url) {
       box.classList.remove('loading');
       if (!url) return;
+      thumbUrl = url;
       var im = document.createElement('img');
       im.alt = '記録の画像';
       im.src = url;
@@ -1322,25 +1327,45 @@
       rm.addEventListener('click', onRemove);
       box.appendChild(rm);
     } else {
-      box.addEventListener('click', function () { openViewer(img); });
+      box.addEventListener('click', function () { openViewer(img, thumbUrl); });
     }
     return box;
   }
 
-  function openViewer(img) {
+  /**
+   * 拡大表示。一覧で読み込み済みの小さい写真を先に広げて見せ、元の写真が届いたら差し替える。
+   * 元の写真が取れなくても、小さい写真は見えたままにする。
+   */
+  var viewerSeq = 0;
+  function openViewer(img, thumbUrl) {
+    var seq = ++viewerSeq; // 読み込み中に閉じて別の写真を開いたとき、前の写真で上書きしないため
     el.viewerImg.removeAttribute('src');
-    el.viewerMsg.textContent = '読み込み中…';
+    el.viewerImg.classList.toggle('preview', !!thumbUrl);
+    if (thumbUrl) el.viewerImg.src = thumbUrl;
+    el.viewerMsg.classList.toggle('bottom', !!thumbUrl);
+    el.viewerMsg.textContent = thumbUrl ? '高画質で読み込み中…' : '読み込み中…';
     el.viewer.hidden = false;
     fullUrlOf(img).then(function (url) {
-      if (el.viewer.hidden) return;
-      el.viewerMsg.textContent = url ? '' : '画像が見つかりませんでした。';
-      if (url) el.viewerImg.src = url;
+      if (el.viewer.hidden || seq !== viewerSeq) return;
+      if (url) {
+        el.viewerImg.src = url;
+        el.viewerImg.classList.remove('preview');
+        el.viewerMsg.textContent = '';
+      } else if (!thumbUrl) {
+        el.viewerMsg.textContent = '画像が見つかりませんでした。';
+      } else {
+        el.viewerMsg.textContent = '';
+      }
     }).catch(function () {
-      el.viewerMsg.textContent = '画像を読み込めませんでした。電波の良い場所でもう一度お試しください。';
+      if (el.viewer.hidden || seq !== viewerSeq) return;
+      el.viewerMsg.textContent = thumbUrl
+        ? '高画質の写真を読み込めませんでした（電波の良い場所で開き直してください）'
+        : '画像を読み込めませんでした。電波の良い場所でもう一度お試しください。';
     });
   }
 
   function closeViewer() {
+    viewerSeq++;
     el.viewer.hidden = true;
     el.viewerImg.removeAttribute('src');
   }
@@ -1396,7 +1421,7 @@
     el.photoRow.hidden = false;
     setupPhotoPicker(el.photoBtn, el.photoInput, el.photoRow, function () { return composeImages; }, renderComposeImages);
     el.viewerClose.addEventListener('click', closeViewer);
-    el.viewer.addEventListener('click', function (e) { if (e.target === el.viewer) closeViewer(); });
+    el.viewer.addEventListener('click', function (e) { if (e.target === el.viewer || e.target === el.viewerImg) closeViewer(); }); // 写真が画面いっぱいなので、写真をタップしても閉じる
   }
 
   /** 送信前に、未送信の画像（cid）を順に送り、送信済みの形 { id, thumb } に置き換える */
