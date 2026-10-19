@@ -1,0 +1,1583 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<!-- ボヤージュ支援記録ノート（アプリ版・PWA）。記録の送受信は Apps Script の受付窓口（API_URL）に対して行う -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ボヤージュ支援記録ノート</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2B66B1">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="支援記録">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf7f2; --surface: #ffffff; --surface-2: #f2ede3;
+    --ink: #2b2a25; --muted: #746c5c; --line: #e7e0d2;
+    --accent: #3d6b63; --accent-ink: #ffffff; --accent-soft: #e3ede9; --accent-soft-ink: #2c4f49;
+    --good: #3f7d4e; --good-soft: #e5f0e6; --pending: #a8722e; --pending-soft: #f4e9d7;
+    --danger: #a6453a; --danger-soft: #f5e5e2; --focus: #3d6b63;
+    --shadow: 0 1px 2px rgba(43,42,37,0.06), 0 4px 16px rgba(43,42,37,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1a16; --surface: #26241e; --surface-2: #302c24;
+      --ink: #f1ece0; --muted: #b6ac97; --line: #3c372c;
+      --accent: #7bb0a4; --accent-ink: #16302b; --accent-soft: #263b36; --accent-soft-ink: #bfe0d6;
+      --good: #7bc98d; --good-soft: #22352a; --pending: #e0ac5f; --pending-soft: #3a3021;
+      --danger: #e0958a; --danger-soft: #3a2620; --focus: #7bb0a4;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  /* 文字サイズは html の font-size で切り替える（画面内の寸法はすべて rem 基準） */
+  html { font-size: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+  h1, h2, .brand { font-family: "Zen Maru Gothic","Zen Kaku Gothic New",sans-serif; text-wrap: balance; }
+  .shell { max-width: 560px; margin: 0 auto; padding: 0 0 96px; min-height: 100vh; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 18px 18px 12px; border-bottom: 1px solid var(--line); }
+  .brand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .brand { font-size: 1.15rem; font-weight: 700; margin: 0; }
+  .date-nav { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+  .date-label { position: relative; display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+  .date-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: none; padding: 0; }
+  .date-pill { font-size: .85rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .tools-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 18px 0; }
+  .mode-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
+  .mode-btn { font-size: .78rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 999px; padding: 6px 12px; }
+  .mode-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .size-row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: .72rem; color: var(--muted); }
+  .size-btn { font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; }
+  .size-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .nav-btn { width: 2.1rem; height: 2.1rem; border-radius: 50%; background: var(--surface); color: var(--ink); border: 1px solid var(--line); font-size: 1.2rem; line-height: 1; padding: 0; }
+  .nav-btn:disabled { opacity: .35; cursor: default; }
+  .today-btn { margin-left: auto; font-size: .76rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 6px 12px; }
+  .compose h2.is-past { color: var(--pending); }
+  .status-row { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .me-row { font-size: .78rem; color: var(--muted); }
+  .me-row strong { color: var(--ink); font-weight: 700; }
+  .sync-pill { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+  .sync-pill.synced { background: var(--good-soft); color: var(--good); }
+  .sync-pill.pending { background: var(--pending-soft); color: var(--pending); }
+  .sync-pill.offline { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .sync-pill.pending .sync-dot { animation: pulse 1.4s ease-in-out infinite; }
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .compose { margin: 16px 18px 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 14px 12px; box-shadow: var(--shadow); }
+  .compose h2 { margin: 0 0 10px; font-size: .95rem; font-weight: 700; color: var(--muted); }
+  .field-row { display: grid; grid-template-columns: minmax(0, 1fr) 6.75rem; gap: 8px; margin-bottom: 8px; }
+  .field-row > div { min-width: 0; }
+  label.hint { display: block; font-size: .7rem; color: var(--muted); margin-bottom: 4px; }
+  select, input[type="time"], textarea { width: 100%; max-width: 100%; min-width: 0; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+  /* iPhoneの時刻入力は標準だと幅・高さがはみ出すため、枠に収めて他の入力欄と高さを揃える */
+  select, input[type="time"] { height: 2.75rem; }
+  input[type="time"] { -webkit-appearance: none; appearance: none; display: block; text-align: center; }
+  input[type="time"]::-webkit-date-and-time-value { text-align: center; margin: 0; }
+  select:focus, input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  textarea { resize: vertical; min-height: 4rem; line-height: 1.55; margin-bottom: 10px; font-family: inherit; }
+  #contentInput { min-height: 9.4rem; }
+  .edit-content { min-height: 11.9rem; }
+  .compose-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+  button { font: inherit; cursor: pointer; border: none; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 10px 20px; border-radius: 999px; box-shadow: var(--shadow); }
+  .btn-primary:disabled { opacity: .6; cursor: default; }
+  .timeline { margin: 18px 10px 0 4px; padding: 0; list-style: none; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: calc(2.75rem + 9px); top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+  .entry { position: relative; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); column-gap: 16px; margin-bottom: 14px; }
+  .entry-time { position: relative; padding-top: 14px; text-align: right; font-weight: 700; font-size: .82rem; color: var(--muted); }
+  .entry-time::after { content: ""; position: absolute; right: -14px; top: calc(8px + .75em); width: 9px; height: 9px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+  .entry.is-pending .entry-time::after { background: var(--pending); }
+  .entry-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 13px; box-shadow: var(--shadow); }
+  .entry.is-pending .entry-card { border-style: dashed; }
+  .entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 7px; }
+  .chip { font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .chip-staff { background: var(--accent-soft); color: var(--accent-soft-ink); }
+  /* 記録者ごとの色（職員マスタの「色」列）。色名は colorKey() で下のキーに変換する */
+  .chip-staff[data-color] { background: var(--c-bg); color: var(--c-ink); }
+  [data-color="blue"]   { --c-bg: #dbeafe; --c-ink: #1e3a8a; }
+  [data-color="sky"]    { --c-bg: #d7f1fb; --c-ink: #0c4a6e; }
+  [data-color="teal"]   { --c-bg: #d0efec; --c-ink: #134e4a; }
+  [data-color="green"]  { --c-bg: #dcf3e1; --c-ink: #14532d; }
+  [data-color="lime"]   { --c-bg: #ecf6cc; --c-ink: #3f6212; }
+  [data-color="yellow"] { --c-bg: #fdf2b8; --c-ink: #713f12; }
+  [data-color="orange"] { --c-bg: #fde0c4; --c-ink: #7c2d12; }
+  [data-color="red"]    { --c-bg: #fcd9d6; --c-ink: #7f1d1d; }
+  [data-color="pink"]   { --c-bg: #fcdcec; --c-ink: #831843; }
+  [data-color="purple"] { --c-bg: #e9dcfa; --c-ink: #4c1d95; }
+  [data-color="brown"]  { --c-bg: #eadccb; --c-ink: #5b3a1a; }
+  [data-color="navy"]   { --c-bg: #cfd8ee; --c-ink: #172554; }
+  [data-color="gray"]   { --c-bg: #e4e4e0; --c-ink: #3f3f3a; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) [data-color="blue"]   { --c-bg: #1e3a5f; --c-ink: #bfdbfe; }
+    :root:not([data-theme="light"]) [data-color="sky"]    { --c-bg: #0f3b4f; --c-ink: #bae6fd; }
+    :root:not([data-theme="light"]) [data-color="teal"]   { --c-bg: #17403d; --c-ink: #99f6e4; }
+    :root:not([data-theme="light"]) [data-color="green"]  { --c-bg: #1d3a28; --c-ink: #bbf7d0; }
+    :root:not([data-theme="light"]) [data-color="lime"]   { --c-bg: #33401a; --c-ink: #d9f99d; }
+    :root:not([data-theme="light"]) [data-color="yellow"] { --c-bg: #4a3d10; --c-ink: #fde68a; }
+    :root:not([data-theme="light"]) [data-color="orange"] { --c-bg: #4a2a14; --c-ink: #fed7aa; }
+    :root:not([data-theme="light"]) [data-color="red"]    { --c-bg: #4a1f1c; --c-ink: #fecaca; }
+    :root:not([data-theme="light"]) [data-color="pink"]   { --c-bg: #4a1d36; --c-ink: #fbcfe8; }
+    :root:not([data-theme="light"]) [data-color="purple"] { --c-bg: #35224f; --c-ink: #ddd6fe; }
+    :root:not([data-theme="light"]) [data-color="brown"]  { --c-bg: #3d2e20; --c-ink: #e7d3bd; }
+    :root:not([data-theme="light"]) [data-color="navy"]   { --c-bg: #1b2545; --c-ink: #c7d2fe; }
+    :root:not([data-theme="light"]) [data-color="gray"]   { --c-bg: #3a3a36; --c-ink: #d6d6d0; }
+  }
+  .chip-target { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .chip-mine { background: var(--good-soft); color: var(--good); }
+  .chip-pending { background: var(--pending-soft); color: var(--pending); }
+  .entry-content { font-size: .92rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
+  /* 長い記録は5行で折りたたむ（「続きを表示」で全文） */
+  .entry-content.clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
+  .more-btn { display: block; background: none; color: var(--accent); font-size: .76rem; font-weight: 700; padding: 0; margin: -4px 0 10px; }
+  /* 時刻：「今」ボタンと、入力方法（スクロール／直接入力）の切り替え */
+  .time-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; }
+  .time-head label.hint { margin-bottom: 0; }
+  .mini-btn { font-size: .68rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; }
+  .link-btn { display: block; white-space: nowrap; background: none; color: var(--muted); font-size: .68rem; padding: 4px 0 0; text-decoration: underline; text-align: right; width: 100%; }
+  input.time-text {
+    display: block; width: 100%; max-width: 100%; min-width: 0; height: 2.75rem; font: inherit; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 6px; text-align: center;
+    letter-spacing: .04em; -webkit-appearance: none; appearance: none;
+  }
+  input.time-text.invalid { border-color: var(--danger); }
+  .entry-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 9px; border-top: 1px dashed var(--line); flex-wrap: wrap; }
+  .transcribe-label { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); cursor: pointer; }
+  .transcribe-label input { width: 16px; height: 16px; accent-color: var(--good); }
+  .transcribe-label.done { color: var(--good); font-weight: 700; }
+  .entry-ops { display: flex; gap: 6px; }
+  .op-btn { font-size: .74rem; font-weight: 700; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; }
+  .op-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+  .op-btn.save { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .locked-note { font-size: .72rem; color: var(--muted); opacity: .75; }
+  .empty, .loading { margin: 40px 18px; text-align: center; color: var(--muted); font-size: .88rem; }
+  .edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .banner { margin: 16px 18px 0; border-radius: 12px; padding: 10px 13px; font-size: .78rem; line-height: 1.6; }
+  .banner.error { background: var(--danger-soft); color: var(--danger); }
+  .banner.conflict p { margin: 0 0 8px; }
+  .conflict-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .conflict-actions .op-btn { background: var(--surface); color: var(--danger); border-color: var(--danger); }
+  .banner.info { background: var(--accent-soft); color: var(--accent-soft-ink); }
+  .entry-ops { align-items: center; }
+
+  /* 絞り込み・印刷 */
+  .filter-card input[type="date"], .filter-card input[type="search"] {
+    display: block; width: 100%; max-width: 100%; min-width: 0; height: 2.75rem; font: inherit; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px;
+    -webkit-appearance: none; appearance: none;
+  }
+  .filter-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 8px; }
+  .filter-grid > div { min-width: 0; }
+  .filter-card select { margin-bottom: 8px; height: 2.75rem; }
+  .check-label { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin: 10px 0 12px; cursor: pointer; }
+  .check-label input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .btn-secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 700; padding: 10px 18px; border-radius: 999px; }
+  .btn-secondary:disabled, .btn-primary:disabled { opacity: .45; cursor: default; }
+  .filter-note { font-size: .7rem; color: var(--muted); margin: 0 0 4px; }
+  .result-summary { margin: 14px 18px 0; font-size: .82rem; color: var(--muted); }
+  .day-head { margin: 18px 18px 0; padding-bottom: 4px; font-size: .9rem; font-weight: 700; border-bottom: 1px solid var(--line); }
+  #results .timeline { margin-top: 10px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
+    background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px;
+    font-size: .82rem; font-weight: 700; box-shadow: var(--shadow); white-space: nowrap;
+  }
+
+  /* 印刷用（画面では非表示） */
+  #printView { display: none; }
+  @media print {
+    @page { size: A4 portrait; margin: 12mm; }
+    html, body { background: #fff !important; color: #000 !important; }
+    .shell { max-width: none; padding: 0; min-height: 0; }
+    .shell > *:not(#printView), .toast { display: none !important; }
+    #printView { display: block !important; font-size: 10pt; color: #000; }
+    .pv-title { font-size: 13pt; margin: 0 0 4px; }
+    .pv-cond, .pv-meta { margin: 0 0 4px; font-size: 9pt; }
+    .pv-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; }
+    .pv-table th, .pv-table td { border: 1px solid #888; padding: 4px 5px; text-align: left; vertical-align: top; word-break: break-word; }
+    .pv-table th { background: #eee; font-weight: 700; }
+    .pv-table td.c { white-space: pre-wrap; }
+    .pv-table td.t { text-align: center; }
+    .pv-table thead { display: table-header-group; }
+    .pv-table tr { page-break-inside: avoid; break-inside: avoid; }
+  }
+
+  /* ログイン画面（アプリ版） */
+  .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
+  .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
+  .auth-icon { display: block; width: 64px; height: 64px; border-radius: 15px; margin: 0 auto 10px; }
+  .auth-card .brand { text-align: center; margin-bottom: 14px; }
+  .auth-tabs { display: flex; margin: 0 auto 16px; width: fit-content; }
+  .auth-card label.hint { margin-top: 10px; }
+  .auth-input {
+    display: block; width: 100%; height: 2.9rem; font: inherit; font-size: 1.05rem; letter-spacing: .08em; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; -webkit-appearance: none; appearance: none;
+  }
+  .auth-btn { display: block; width: 100%; margin-top: 18px; }
+  .auth-note { font-size: .74rem; color: var(--muted); line-height: 1.6; margin: 12px 0 0; }
+  .auth-error { font-size: .8rem; color: var(--danger); background: var(--danger-soft); border-radius: 10px; padding: 8px 10px; margin: 14px 0 0; line-height: 1.6; }
+  .logout-btn { background: none; color: var(--muted); font-size: .72rem; text-decoration: underline; padding: 0 0 0 8px; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap" id="authView" hidden>
+  <div class="auth-card">
+    <img class="auth-icon" src="icons/icon-192.png" alt="">
+    <h1 class="brand">ボヤージュ支援記録ノート</h1>
+    <div class="mode-tabs auth-tabs" role="group" aria-label="ログインの種類">
+      <button type="button" class="mode-btn" id="authLoginTab" aria-pressed="true">ログイン</button>
+      <button type="button" class="mode-btn" id="authRegTab" aria-pressed="false">初回登録・再設定</button>
+    </div>
+    <form id="loginForm" autocomplete="on">
+      <label class="hint" for="lStaffId">職員ID</label>
+      <input class="auth-input" id="lStaffId" inputmode="numeric" autocomplete="username" required>
+      <label class="hint" for="lPin">暗証番号（6桁）</label>
+      <input class="auth-input" id="lPin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" required>
+      <button type="submit" class="btn-primary auth-btn" id="loginBtn">ログイン</button>
+      <p class="auth-note">一度ログインすると、次からは開くだけで使えます。</p>
+    </form>
+    <form id="regForm" autocomplete="off" hidden>
+      <label class="hint" for="rStaffId">職員ID</label>
+      <input class="auth-input" id="rStaffId" inputmode="numeric" required>
+      <label class="hint" for="rCode">初回コード（6桁・管理者から受け取る）</label>
+      <input class="auth-input" id="rCode" inputmode="numeric" maxlength="6" required>
+      <label class="hint" for="rPin">新しい暗証番号（6桁の数字）</label>
+      <input class="auth-input" id="rPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" required>
+      <label class="hint" for="rPin2">新しい暗証番号（確認のためもう一度）</label>
+      <input class="auth-input" id="rPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" required>
+      <button type="submit" class="btn-primary auth-btn" id="regBtn">登録する</button>
+      <p class="auth-note">「111111」や「123456」のような推測されやすい番号は使えません。暗証番号を忘れたときは、管理者に新しい初回コードを発行してもらい、ここで設定し直してください。</p>
+    </form>
+    <p class="auth-error" id="authError" role="alert" hidden></p>
+  </div>
+</div>
+
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand-row">
+      <h1 class="brand">ボヤージュ支援記録ノート</h1>
+    </div>
+    <div class="date-nav" id="dateNav">
+      <button type="button" class="nav-btn" id="prevDayBtn" aria-label="前の日">‹</button>
+      <label class="date-label">
+        <span class="date-pill" id="datePill"></span>
+        <input type="date" id="dateInput" aria-label="表示する日付を選ぶ">
+      </label>
+      <button type="button" class="nav-btn" id="nextDayBtn" aria-label="次の日">›</button>
+      <button type="button" class="today-btn" id="todayBtn" hidden>今日へ</button>
+    </div>
+    <div class="status-row">
+      <div class="me-row"><span id="meRow">読み込み中…</span><button type="button" class="logout-btn" id="logoutBtn" hidden>ログアウト</button></div>
+      <span class="sync-pill synced" id="syncPill"><span class="sync-dot"></span><span id="syncPillText">同期済み</span></span>
+    </div>
+  </div>
+
+  <div class="tools-row">
+    <div class="mode-tabs" role="group" aria-label="表示の切り替え">
+      <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true">日ごと</button>
+      <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false">絞り込み・印刷</button>
+    </div>
+    <div class="size-row" role="group" aria-label="文字サイズ">
+      <span>文字サイズ</span>
+      <button type="button" class="size-btn" data-size="s" aria-pressed="true">標準</button>
+      <button type="button" class="size-btn" data-size="l" aria-pressed="false">大</button>
+      <button type="button" class="size-btn" data-size="xl" aria-pressed="false">特大</button>
+    </div>
+  </div>
+
+  <div class="banner error" id="errorBanner" hidden></div>
+  <div class="banner error conflict" id="conflictBanner" role="alert" hidden>
+    <p id="conflictMsg"></p>
+    <div class="conflict-actions">
+      <button type="button" class="op-btn" id="conflictCopyBtn">入力内容をコピー</button>
+      <button type="button" class="op-btn" id="conflictCloseBtn">閉じる</button>
+    </div>
+  </div>
+
+  <div class="compose" id="composeCard" hidden>
+    <h2 id="composeTitle">新しい記録</h2>
+    <div class="field-row">
+      <div>
+        <label class="hint" for="targetSelect">対象者（利用者）</label>
+        <select id="targetSelect"></select>
+      </div>
+      <div>
+        <div class="time-head">
+          <label class="hint" for="timeInput">時刻</label>
+          <button type="button" class="mini-btn" id="nowBtn" aria-label="時刻を今にする">今</button>
+        </div>
+        <input type="time" id="timeInput">
+        <button type="button" class="link-btn" id="timeModeBtn">直接入力に切替</button>
+      </div>
+    </div>
+    <label class="hint" for="contentInput">内容</label>
+    <textarea id="contentInput" placeholder="例）居室にて体温測定 36.4℃。食欲あり、昼食は全量摂取。"></textarea>
+    <div class="compose-actions">
+      <button class="btn-primary" id="submitBtn">記録する</button>
+    </div>
+  </div>
+
+  <p class="loading" id="loadingMsg">読み込み中…</p>
+  <ul class="timeline" id="timeline" hidden></ul>
+  <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
+
+  <div class="compose filter-card" id="filterCard" hidden>
+    <h2>絞り込み</h2>
+    <div class="filter-grid">
+      <div>
+        <label class="hint" for="fFrom">開始日</label>
+        <input type="date" id="fFrom">
+      </div>
+      <div>
+        <label class="hint" for="fTo">終了日</label>
+        <input type="date" id="fTo">
+      </div>
+    </div>
+    <p class="filter-note">期間は約3か月（93日）まで指定できます。</p>
+    <label class="hint" for="fTarget">対象者（利用者）</label>
+    <select id="fTarget"></select>
+    <label class="hint" for="fStaff">記録者（職員）</label>
+    <select id="fStaff"></select>
+    <label class="hint" for="fKeyword">キーワード（内容に含む言葉）</label>
+    <input type="search" id="fKeyword" placeholder="例）通院" enterkeyhint="search">
+    <label class="check-label"><input type="checkbox" id="fUntranscribed"> 未転記の記録だけ</label>
+    <div class="compose-actions">
+      <button type="button" class="btn-secondary" id="printBtn" disabled>印刷</button>
+      <button type="button" class="btn-primary" id="searchBtn">検索</button>
+    </div>
+  </div>
+  <p class="result-summary" id="resultSummary" hidden></p>
+  <div id="results" hidden></div>
+
+  <div id="printView"></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  var STORE_KEY = 'srn.v1';
+  var POLL_INTERVAL_MS = 20000;
+  var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
+
+  var me = null;          // { email, staffName }
+  var viewDateKey = null; // 画面に表示している日付（端末の現在日付）
+  var baseRecords = [];   // 直近にサーバーから取得した記録（クエリ待ちの操作は含まない）
+  var queue = [];         // 送信待ちの操作 [{opId, type, id/tempId, payload, dateKey}]
+  var pollTimer = null;
+  var flushing = false;
+  var editingId = null;   // 編集フォームを開いている記録のID（開いている間は自動更新で画面を作り直さない）
+  var userPickedDate = false; // 利用者が日付を自分で切り替えたか（日付またぎの自動切替の判定用）
+  var tempIdMap = {};         // 送信前の仮ID → 登録後の本当のID
+  var viewMode = 'day';       // 'day'（日ごと） / 'filter'（絞り込み・印刷）
+  var targetList = [];        // 対象者（利用者）の一覧
+  var staffNameList = [];     // 記録者（職員）の一覧
+  var lastSearch = null;      // 直近の絞り込み結果 { q, records, truncated }
+  var SEARCH_TIMEOUT_MS = 120000; // 絞り込みは月ファイルのタブを順に読むため長めに待つ
+  var SEARCH_MAX_DAYS = 93;
+
+  var el = {
+    datePill: document.getElementById('datePill'),
+    dateInput: document.getElementById('dateInput'),
+    prevDayBtn: document.getElementById('prevDayBtn'),
+    nextDayBtn: document.getElementById('nextDayBtn'),
+    todayBtn: document.getElementById('todayBtn'),
+    composeTitle: document.getElementById('composeTitle'),
+    meRow: document.getElementById('meRow'),
+    logoutBtn: document.getElementById('logoutBtn'),
+    shell: document.querySelector('.shell'),
+    authView: document.getElementById('authView'),
+    authLoginTab: document.getElementById('authLoginTab'),
+    authRegTab: document.getElementById('authRegTab'),
+    loginForm: document.getElementById('loginForm'),
+    regForm: document.getElementById('regForm'),
+    authError: document.getElementById('authError'),
+    syncPill: document.getElementById('syncPill'),
+    syncPillText: document.getElementById('syncPillText'),
+    errorBanner: document.getElementById('errorBanner'),
+    conflictBanner: document.getElementById('conflictBanner'),
+    conflictMsg: document.getElementById('conflictMsg'),
+    conflictCopyBtn: document.getElementById('conflictCopyBtn'),
+    conflictCloseBtn: document.getElementById('conflictCloseBtn'),
+    composeCard: document.getElementById('composeCard'),
+    targetSelect: document.getElementById('targetSelect'),
+    timeInput: document.getElementById('timeInput'),
+    contentInput: document.getElementById('contentInput'),
+    submitBtn: document.getElementById('submitBtn'),
+    loadingMsg: document.getElementById('loadingMsg'),
+    timeline: document.getElementById('timeline'),
+    emptyMsg: document.getElementById('emptyMsg'),
+    dateNav: document.getElementById('dateNav'),
+    modeDayBtn: document.getElementById('modeDayBtn'),
+    modeFilterBtn: document.getElementById('modeFilterBtn'),
+    filterCard: document.getElementById('filterCard'),
+    fFrom: document.getElementById('fFrom'),
+    fTo: document.getElementById('fTo'),
+    fTarget: document.getElementById('fTarget'),
+    fStaff: document.getElementById('fStaff'),
+    fKeyword: document.getElementById('fKeyword'),
+    fUntranscribed: document.getElementById('fUntranscribed'),
+    searchBtn: document.getElementById('searchBtn'),
+    printBtn: document.getElementById('printBtn'),
+    resultSummary: document.getElementById('resultSummary'),
+    results: document.getElementById('results'),
+    printView: document.getElementById('printView'),
+    toast: document.getElementById('toast'),
+    nowBtn: document.getElementById('nowBtn'),
+    timeModeBtn: document.getElementById('timeModeBtn')
+  };
+
+  // ---------- ユーティリティ ----------
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function nowHHMM() { var d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function localDateKey() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  // ---------- 文字サイズ（この端末にだけ記憶する） ----------
+
+  var SIZE_STORE_KEY = 'srn.fontsize';
+  var FONT_SIZES = { s: 16, l: 19, xl: 22 }; // 標準 / 大 / 特大（px）
+  function applyFontSize(key) {
+    if (!FONT_SIZES[key]) key = 's';
+    document.documentElement.style.fontSize = FONT_SIZES[key] + 'px';
+    Array.prototype.forEach.call(document.querySelectorAll('.size-btn'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-size') === key ? 'true' : 'false');
+    });
+    return key;
+  }
+  function initFontSize() {
+    var saved = 's';
+    try { saved = localStorage.getItem(SIZE_STORE_KEY) || 's'; } catch (e) { /* 記憶できなくても動作に影響なし */ }
+    applyFontSize(saved);
+    Array.prototype.forEach.call(document.querySelectorAll('.size-btn'), function (b) {
+      b.addEventListener('click', function () {
+        var k = applyFontSize(b.getAttribute('data-size'));
+        try { localStorage.setItem(SIZE_STORE_KEY, k); } catch (e) { /* 同上 */ }
+        refreshClamp(document); // 文字の大きさで行数が変わるため、折りたたみを判定し直す
+      });
+    });
+  }
+
+  // ---------- 時刻の入力方法（スクロール／直接入力。この端末にだけ記憶する） ----------
+
+  var TIME_MODE_KEY = 'srn.timemode';
+  var timeMode = 'wheel'; // 'wheel'（端末標準のスクロール・時計） / 'text'（数字を直接入力）
+
+  /** 入力欄を、選んでいる入力方法に合わせる（値は "HH:MM" のまま引き継ぐ） */
+  function applyTimeMode(input) {
+    if (!input) return;
+    var value = input.value;
+    if (timeMode === 'text') {
+      input.type = 'text';
+      input.setAttribute('inputmode', 'numeric');
+      input.setAttribute('placeholder', '例 0930');
+      input.setAttribute('maxlength', '5');
+      input.setAttribute('autocomplete', 'off');
+      input.classList.add('time-text');
+      if (!input.dataset.fmtBound) {
+        input.dataset.fmtBound = '1';
+        // タップしたら今の時刻をいったん消し、すぐ数字を打てるようにする（消した時刻は薄く表示しておく）
+        input.addEventListener('focus', function () {
+          if (timeMode !== 'text' || !input.value) return;
+          input.dataset.prev = input.value;
+          input.setAttribute('placeholder', input.value);
+          input.value = '';
+          input.classList.remove('invalid');
+        });
+        input.addEventListener('input', function () { if (timeMode === 'text') formatTimeTyping(input); });
+        input.addEventListener('blur', function () {
+          if (timeMode !== 'text') return;
+          if (!input.value && input.dataset.prev) input.value = input.dataset.prev; // 何も打たなければ元の時刻に戻す
+          input.dataset.prev = '';
+          input.setAttribute('placeholder', '例 0930');
+          if (!input.value) return;
+          var t = normalizeTimeText(input.value);
+          if (t) { input.value = t; input.classList.remove('invalid'); } else { input.classList.add('invalid'); }
+        });
+      }
+    } else {
+      input.type = 'time';
+      input.removeAttribute('inputmode');
+      input.removeAttribute('placeholder');
+      input.removeAttribute('maxlength');
+      input.classList.remove('time-text', 'invalid');
+    }
+    if (/^\d{2}:\d{2}$/.test(value)) input.value = value;
+  }
+
+  /** 打っている途中の表示：数字だけ取り出し、2桁目のあとに「:」を入れる（「9」から始めたら 09 とみなす） */
+  function formatTimeTyping(input) {
+    var d = input.value.replace(/\D/g, '');
+    if (d.length && d.charAt(0) > '2') d = '0' + d;
+    d = d.slice(0, 4);
+    input.value = d.length > 2 ? d.slice(0, 2) + ':' + d.slice(2) : d;
+    input.classList.remove('invalid');
+  }
+
+  /** 「930」「0930」「9」「09:30」などを "09:30" にする。時刻として正しくなければ null */
+  function normalizeTimeText(text) {
+    var d = String(text || '').replace(/\D/g, '');
+    if (!d) return null;
+    var h, m;
+    if (d.length <= 2) { h = Number(d); m = 0; }
+    else if (d.length === 3) { h = Number(d.slice(0, 1)); m = Number(d.slice(1)); }
+    else { h = Number(d.slice(0, 2)); m = Number(d.slice(2, 4)); }
+    if (h > 23 || m > 59) return null;
+    return pad2(h) + ':' + pad2(m);
+  }
+
+  /** 入力欄から送る時刻を取り出す（直接入力で不正なら null。空なら今の時刻） */
+  function readTimeInput(input) {
+    if (!input.value) return nowHHMM();
+    if (timeMode !== 'text') return input.value;
+    return normalizeTimeText(input.value);
+  }
+
+  function updateTimeModeButton() {
+    el.timeModeBtn.textContent = timeMode === 'text' ? 'スクロールに切替' : '直接入力に切替';
+  }
+
+  function initTimeMode() {
+    try { timeMode = localStorage.getItem(TIME_MODE_KEY) === 'text' ? 'text' : 'wheel'; } catch (e) { timeMode = 'wheel'; }
+    applyTimeMode(el.timeInput);
+    updateTimeModeButton();
+    el.timeModeBtn.addEventListener('click', function () {
+      timeMode = timeMode === 'text' ? 'wheel' : 'text';
+      try { localStorage.setItem(TIME_MODE_KEY, timeMode); } catch (e) { /* 記憶できなくても動作に影響なし */ }
+      applyTimeMode(el.timeInput);
+      Array.prototype.forEach.call(document.querySelectorAll('.edit-time'), applyTimeMode);
+      updateTimeModeButton();
+    });
+    el.nowBtn.addEventListener('click', function () {
+      el.timeInput.value = nowHHMM();
+      el.timeInput.classList.remove('invalid');
+    });
+  }
+
+  // ---------- 長い記録の折りたたみ ----------
+
+  var expandedIds = {}; // 「続きを表示」で開いている記録（自動更新で描き直しても開いたままにする）
+
+  /** 5行を超える記録だけ折りたたみ、「続きを表示／閉じる」ボタンを出す（表示中の要素で行数を測る） */
+  function refreshClamp(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.entry-content[data-id]'), function (c) {
+      var btn = c.nextElementSibling;
+      if (!btn || !btn.classList.contains('more-btn')) return;
+      c.classList.add('clamped');
+      var overflowing = c.scrollHeight > c.clientHeight + 2;
+      var expanded = !!expandedIds[c.getAttribute('data-id')];
+      if (!overflowing || expanded) c.classList.remove('clamped');
+      btn.hidden = !overflowing;
+      btn.textContent = expanded ? '閉じる ▲' : '続きを表示 ▼';
+    });
+  }
+
+  // ---------- 記録者の色（職員マスタの「色」列の色名 → 画面のパレット） ----------
+
+  var COLOR_KEYS = {
+    '青': 'blue', 'あお': 'blue', 'ブルー': 'blue',
+    '水色': 'sky', 'みずいろ': 'sky', 'スカイ': 'sky',
+    '青緑': 'teal', 'ティール': 'teal',
+    '緑': 'green', 'みどり': 'green', 'グリーン': 'green',
+    '黄緑': 'lime', 'きみどり': 'lime', 'ライム': 'lime',
+    '黄': 'yellow', '黄色': 'yellow', 'きいろ': 'yellow', 'イエロー': 'yellow',
+    'オレンジ': 'orange', '橙': 'orange',
+    '赤': 'red', 'あか': 'red', 'レッド': 'red',
+    'ピンク': 'pink',
+    '紫': 'purple', 'むらさき': 'purple', 'パープル': 'purple',
+    '茶': 'brown', '茶色': 'brown', 'ブラウン': 'brown',
+    '紺': 'navy', 'ネイビー': 'navy',
+    'グレー': 'gray', '灰': 'gray', '灰色': 'gray'
+  };
+  function colorKey(name) { return COLOR_KEYS[String(name || '').trim()] || ''; }
+
+  function shiftDateKey(key, delta) {
+    var p = key.split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + delta);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function dateKeyLabel(key) {
+    var p = key.split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return p[0] + '年' + Number(p[1]) + '月' + Number(p[2]) + '日（' + '日月火水木金土'.charAt(d.getDay()) + '）';
+  }
+  function uid() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
+  function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+  var errorTimer = null;
+  function showError(msg, sticky) {
+    el.errorBanner.textContent = msg;
+    el.errorBanner.hidden = false;
+    clearTimeout(errorTimer);
+    if (!sticky) errorTimer = setTimeout(function () { el.errorBanner.hidden = true; }, 8000);
+  }
+  function clearError() { el.errorBanner.hidden = true; }
+
+  function loadStore() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      var s = raw ? JSON.parse(raw) : {};
+      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [] };
+    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [] }; }
+  }
+  function persistStore() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList }));
+    } catch (e) { /* 容量不足・プライベートモード等は無視 */ }
+  }
+
+  /** 送信前の仮ID（tmp-…）を、登録後の本当のIDに読み替える（送信済みなら本当のIDを返す） */
+  function resolveId(id) { return tempIdMap[id] || id; }
+
+  /** 登録が完了した仮IDを記憶し、後ろに並んでいる操作のIDも本当のIDに書き換える */
+  function rememberRealId(tempId, realId) {
+    if (!tempId || !realId) return;
+    tempIdMap[tempId] = realId;
+    var keys = Object.keys(tempIdMap);
+    if (keys.length > 200) delete tempIdMap[keys[0]]; // 古いものから捨てる（記憶しすぎない）
+    queue.forEach(function (q) {
+      if (q.id === tempId) q.id = realId;
+      if (q.payload && q.payload.id === tempId) q.payload.id = realId;
+    });
+  }
+
+  // ---------- 受付窓口（Apps Script）との送受信 ----------
+
+  var API_URL = 'https://script.google.com/macros/s/AKfycbyIGqwHztBZ0USA_gs7nmBkmzeInDeIoeiWZsEKKZDr3DwGaMyhTBUIeWKgHqQaBl3YdA/exec';
+  var TOKEN_KEY = 'srn.token';
+  var token = null; // ログインの通行証（この端末にだけ保存）
+
+  /** 受付窓口に送る。res.ok=false はエラー（code: AUTH/STOPPED ならログイン画面へ戻す） */
+  function apiPost(body, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        if (ctrl) ctrl.abort();
+        reject({ message: 'timeout', isTimeout: true });
+      }, timeoutMs || CALL_TIMEOUT_MS);
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // 事前確認（preflight）が要らない形で送る
+        body: JSON.stringify(body),
+        cache: 'no-store',
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (res && res.ok === false) {
+          if (res.code === 'AUTH' || res.code === 'STOPPED') handleAuthLost(res.error);
+          reject({ message: res.error || 'エラーが発生しました。', code: res.code });
+        } else {
+          resolve(res);
+        }
+      }).catch(function () {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject({ message: 'network', isNetwork: true }); // 圏外など。送信待ちの記録は後で自動再送する
+      });
+    });
+  }
+
+  var FN_TO_ACTION = {
+    getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords'
+  };
+
+  /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
+  function callServer(fnName, args, timeoutMs) {
+    if (!token) return Promise.reject({ message: 'ログインが必要です。', code: 'AUTH' });
+    var body = { action: FN_TO_ACTION[fnName], token: token };
+    if (fnName === 'getBootstrap' || fnName === 'getRecords') body.dateKey = args;
+    else if (fnName === 'searchRecords') body.query = args;
+    else body.payload = args;
+    return apiPost(body, timeoutMs).then(function (res) {
+      if (fnName === 'getRecords') return res.records || [];
+      if (fnName === 'getBootstrap') {
+        var p = res.profile || {};
+        return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
+          targets: res.targets, staffNames: res.staffNames, dateKey: res.dateKey, records: res.records };
+      }
+      return res;
+    });
+  }
+
+  // ---------- ログイン ----------
+
+  function loadToken() { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } }
+  function saveToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 無視 */ } }
+
+  function showAuth(mode, message) {
+    el.shell.hidden = true;
+    el.authView.hidden = false;
+    setAuthMode(mode || 'login');
+    el.authError.hidden = !message;
+    el.authError.textContent = message || '';
+  }
+
+  function hideAuth() {
+    el.authView.hidden = true;
+    el.shell.hidden = false;
+  }
+
+  function setAuthMode(mode) {
+    var isLogin = mode === 'login';
+    el.authLoginTab.setAttribute('aria-pressed', isLogin ? 'true' : 'false');
+    el.authRegTab.setAttribute('aria-pressed', isLogin ? 'false' : 'true');
+    el.loginForm.hidden = !isLogin;
+    el.regForm.hidden = isLogin;
+    el.authError.hidden = true;
+  }
+
+  /** 通行証が無効になった（期限切れ・停止・再設定など）ときは、ログイン画面に戻す */
+  function handleAuthLost(message) {
+    if (!token) return;
+    token = null;
+    saveToken(null);
+    showAuth('login', message || 'もう一度ログインしてください。');
+  }
+
+  function authFail(message) {
+    el.authError.textContent = message;
+    el.authError.hidden = false;
+  }
+
+  /** ログイン／登録に成功したとき。別の職員に切り替わった場合は、前の人の端末内データを引き継がない */
+  function onAuthSuccess(res) {
+    var p = res.profile || {};
+    if (me && me.email && p.email && me.email !== p.email) {
+      me = null; baseRecords = []; queue = []; tempIdMap = {};
+      persistStore();
+    }
+    token = res.token;
+    saveToken(token);
+    el.loginForm.reset();
+    el.regForm.reset();
+    hideAuth();
+    startSession();
+  }
+
+  function submitAuth(btn, body) {
+    btn.disabled = true;
+    apiPost(body).then(function (res) {
+      btn.disabled = false;
+      onAuthSuccess(res);
+    }).catch(function (err) {
+      btn.disabled = false;
+      authFail(err.isNetwork || err.isTimeout ? '通信できませんでした。電波の良い場所でもう一度お試しください。' : err.message);
+    });
+  }
+
+  function initAuth() {
+    el.authLoginTab.addEventListener('click', function () { setAuthMode('login'); });
+    el.authRegTab.addEventListener('click', function () { setAuthMode('register'); });
+
+    el.loginForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var staffId = document.getElementById('lStaffId').value.trim();
+      var pin = document.getElementById('lPin').value.trim();
+      if (!staffId || !/^\d{6}$/.test(pin)) { authFail('職員IDと、6桁の暗証番号を入力してください。'); return; }
+      submitAuth(document.getElementById('loginBtn'), { action: 'login', staffId: staffId, pin: pin });
+    });
+
+    el.regForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var staffId = document.getElementById('rStaffId').value.trim();
+      var code = document.getElementById('rCode').value.trim();
+      var pin = document.getElementById('rPin').value.trim();
+      var pin2 = document.getElementById('rPin2').value.trim();
+      if (!staffId || !code) { authFail('職員IDと初回コードを入力してください。'); return; }
+      if (!/^\d{6}$/.test(pin)) { authFail('暗証番号は6桁の数字で入力してください。'); return; }
+      if (pin !== pin2) { authFail('確認のために入力した暗証番号が一致しません。'); return; }
+      submitAuth(document.getElementById('regBtn'), { action: 'register', staffId: staffId, code: code, pin: pin });
+    });
+
+    el.logoutBtn.addEventListener('click', function () {
+      if (queue.length) {
+        showError('まだ送信されていない記録があります。「同期済み」になってからログアウトしてください。');
+        return;
+      }
+      if (!confirm('ログアウトしますか？（次に使うときは、職員IDと暗証番号の入力が必要です）')) return;
+      var old = token;
+      token = null;
+      saveToken(null);
+      apiPost({ action: 'logout', token: old }).catch(function () { /* 通信できなくても端末側はログアウトする */ });
+      me = null; baseRecords = [];
+      persistStore();
+      el.logoutBtn.hidden = true;
+      showAuth('login');
+    });
+  }
+
+
+  // ---------- 起動 ----------
+
+  function init() {
+    var stored = loadStore();
+    me = stored.me;
+    viewDateKey = localDateKey();
+    baseRecords = (stored.dateKey === viewDateKey) ? stored.baseRecords : [];
+    queue = stored.queue || [];
+    tempIdMap = stored.tempIdMap || {};
+    // 対象者・記録者の一覧も端末に覚えておき、通信できないまま開いたときも入力できるようにする
+    targetList = stored.targets || [];
+    staffNameList = stored.staffNames || [];
+    if (targetList.length) populateSelect(el.targetSelect, targetList, true);
+    if (!el.timeInput.value) el.timeInput.value = nowHHMM();
+    if (!el.submitBtn.dataset.bound) {
+      el.submitBtn.dataset.bound = '1';
+      el.submitBtn.addEventListener('click', onSubmit);
+    }
+
+    if (me) {
+      // 前回のログイン情報がキャッシュにあれば、オフラインでも即座に画面を出す
+      showComposer();
+      render();
+    }
+
+    initFontSize();
+    initTimeMode();
+    updateDateUI();
+    el.prevDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, -1), true); });
+    el.nextDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, 1), true); });
+    el.todayBtn.addEventListener('click', function () { changeViewDate(localDateKey(), false); });
+    el.dateInput.addEventListener('change', function () {
+      if (el.dateInput.value) changeViewDate(el.dateInput.value, true);
+    });
+
+    el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
+    el.modeFilterBtn.addEventListener('click', function () { setMode('filter'); });
+    el.searchBtn.addEventListener('click', doSearch);
+    el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
+    el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
+    el.printBtn.addEventListener('click', doPrint);
+    el.fKeyword.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); el.fKeyword.blur(); doSearch(); }
+    });
+    var today = localDateKey();
+    el.fFrom.value = today.slice(0, 8) + '01'; // 初期値は今月1日〜今日
+    el.fTo.value = today;
+    el.fFrom.max = today;
+    el.fTo.max = today;
+    populateFilterSelects();
+
+    window.addEventListener('online', function () { flushQueue(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') { rollOverDayIfNeeded(); flushQueue(); }
+    });
+
+    initAuth();
+    registerServiceWorker();
+    token = loadToken();
+    if (token) startSession(); else showAuth('login');
+  }
+
+  /** ログイン済みのとき：記録を読み込み、自動更新を始める */
+  function startSession() {
+    if (me) { showComposer(); render(); }
+    el.loadingMsg.hidden = !!me;
+    callServer('getBootstrap', viewDateKey).then(onBootstrap).catch(function (err) {
+      el.loadingMsg.hidden = true;
+      if (err && (err.code === 'AUTH' || err.code === 'STOPPED')) return; // ログイン画面に戻っている
+      if (me) {
+        // 圏外で端末内の表示をしている場合は、取得だけ失敗しても表示を維持する
+        setSyncStatus();
+      } else {
+        showError(err && !err.isNetwork && !err.isTimeout ? err.message : '通信できませんでした。電波の良い場所でもう一度開いてください。');
+      }
+    });
+    startPolling();
+  }
+
+  /** 画面の部品を端末に保存し、圏外でも起動できるようにする */
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* 使えない環境では通常のWebページとして動く */ });
+    });
+  }
+
+
+  function onBootstrap(data) {
+    el.loadingMsg.hidden = true;
+
+    if (!data || data.ok === false) {
+      showError((data && data.error) || '読み込みに失敗しました。電波の良い場所でもう一度開いてみてください。', true);
+      if (me) setSyncStatus(); // キャッシュがあれば表示は維持する
+      return;
+    }
+
+    if (!data.staffName) {
+      el.meRow.textContent = '（' + data.email + '）は職員マスタに未登録です';
+      showError('あなたのメールアドレス（' + data.email + '）が「職員マスタ」に登録されていないため、記録を入力できません。管理者に登録を依頼してください。', true);
+      return;
+    }
+
+    me = { email: data.email, staffName: data.staffName, staffColor: data.staffColor || '' };
+    if (data.dateKey === viewDateKey) baseRecords = data.records; // 読み込み中に日付を切り替えた場合は古い日の記録で上書きしない
+    persistStore();
+
+    showComposer();
+    populateSelect(el.targetSelect, data.targets, true);
+    if (!el.timeInput.value) el.timeInput.value = nowHHMM();
+    targetList = data.targets || [];
+    staffNameList = data.staffNames || [];
+    populateFilterSelects();
+    persistStore();
+
+    render();
+    flushQueue();
+
+    if (!el.submitBtn.dataset.bound) {
+      el.submitBtn.dataset.bound = '1';
+      el.submitBtn.addEventListener('click', onSubmit);
+    }
+  }
+
+  function showComposer() {
+    el.meRow.innerHTML = '対応者：<strong>' + escapeHtml(me.staffName) + '</strong>';
+    el.logoutBtn.hidden = false;
+    el.composeCard.hidden = viewMode !== 'day';
+    updateDateUI();
+  }
+
+  /** 日付表示・前後ボタン・入力欄の見出しを、表示中の日付に合わせる */
+  function updateDateUI() {
+    var today = localDateKey();
+    var isToday = viewDateKey === today;
+    el.datePill.textContent = dateKeyLabel(viewDateKey);
+    el.dateInput.value = viewDateKey;
+    el.dateInput.max = today;
+    el.nextDayBtn.disabled = viewDateKey >= today;
+    el.todayBtn.hidden = isToday;
+    el.composeTitle.textContent = isToday ? '新しい記録' : '新しい記録（' + dateKeyLabel(viewDateKey) + ' に追加）';
+    el.composeTitle.className = isToday ? '' : 'is-past';
+    el.emptyMsg.textContent = isToday ? 'まだ記録がありません。今日最初の記録を書いてみましょう。' : 'この日の記録はありません。';
+  }
+
+  /** 表示する日付を切り替える（今日より先は選べない）。過去の日も、現在の日と同じように参照・編集・追記できる */
+  function changeViewDate(key, byUser) {
+    var today = localDateKey();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key > today) { updateDateUI(); return; }
+    if (key === viewDateKey) { updateDateUI(); return; }
+    userPickedDate = !!byUser && key !== today;
+    viewDateKey = key;
+    editingId = null;
+    baseRecords = [];
+    clearError();
+    updateDateUI();
+    el.timeline.hidden = true;
+    el.emptyMsg.hidden = true;
+    el.loadingMsg.hidden = false;
+    callServer('getRecords', key).then(function (records) {
+      if (viewDateKey !== key) return; // 読み込み中にさらに切り替えられた
+      baseRecords = records;
+      el.loadingMsg.hidden = true;
+      persistStore();
+      render();
+    }).catch(function (err) {
+      if (viewDateKey !== key) return;
+      el.loadingMsg.hidden = true;
+      showError('この日の記録を読み込めませんでした。電波の良い場所で、もう一度日付を選んでください。');
+      render();
+    });
+  }
+
+  /** 画面を開いたまま日付が変わったとき、自分で日付を選んでいなければ今日に切り替える */
+  function rollOverDayIfNeeded() {
+    if (!me || userPickedDate) return;
+    if (viewDateKey !== localDateKey()) changeViewDate(localDateKey(), false);
+  }
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function () {
+      rollOverDayIfNeeded();
+      flushQueue();
+      if (navigator.onLine !== false) refreshFromServer();
+    }, POLL_INTERVAL_MS);
+  }
+
+  function refreshFromServer() {
+    if (!me) return;
+    var key = viewDateKey;
+    callServer('getRecords', key).then(function (records) {
+      if (viewDateKey !== key) return; // 取得中に日付が切り替わった場合は捨てる
+      baseRecords = records;
+      persistStore();
+      render();
+    }).catch(function () { /* サイレントに失敗（次回ポーリングで再試行） */ });
+  }
+
+  // ---------- 入力 ----------
+
+  function onSubmit() {
+    var content = el.contentInput.value.trim();
+    if (!content) { el.contentInput.focus(); return; }
+    var time = readTimeInput(el.timeInput);
+    if (!time) {
+      el.timeInput.classList.add('invalid');
+      showError('時刻は「0930」のように4桁の数字で入力してください（例：0930 → 09:30）。');
+      el.timeInput.focus();
+      return;
+    }
+    clearError();
+
+    var op = {
+      opId: uid(),
+      type: 'add',
+      tempId: 'tmp-' + uid(),
+      dateKey: viewDateKey, // 表示中の日付に追加する（日付を選んでいなければ、書いた瞬間の端末日付。同期が翌日にずれ込んでも正しい日に保存される）
+      payload: {
+        target: el.targetSelect.value,
+        content: content,
+        time: time,
+        transcribed: false
+      }
+    };
+    queue.push(op);
+    persistStore();
+
+    el.contentInput.value = '';
+    el.timeInput.value = nowHHMM();
+
+    render();
+    flushQueue();
+  }
+
+  /** 未送信の「追加」に対する編集・削除・転記チェックは、キュー内の追加操作そのものを書き換える */
+  /**
+   * まだ一度も送信していない自分の「追加」なら、その中身を直接書き換える。
+   * 送信中・送信済みの「追加」を書き換えると、サーバーには古い内容が届いたまま編集が消えてしまうため、
+   * その場合は別の操作（更新など）として後ろに並べる（仮IDは登録完了時に本当のIDへ読み替える）。
+   */
+  function mutatePendingAddOrEnqueue(targetId, mutate, fallbackType, fallbackPayload) {
+    var addOp = queue.find(function (q) { return q.type === 'add' && q.tempId === targetId; });
+    if (addOp && !addOp.sent) {
+      mutate(addOp);
+      persistStore();
+      render();
+      return;
+    }
+    var realId = resolveId(targetId);
+    if (fallbackPayload) fallbackPayload.id = realId;
+    // 絞り込み結果から操作した場合もあるので、日付は記録そのものの日付を使う
+    var opDateKey = (fallbackPayload && fallbackPayload.dateKey) || viewDateKey;
+    queue.push({ opId: uid(), type: fallbackType, id: realId, dateKey: opDateKey, payload: fallbackPayload });
+    persistStore();
+    render();
+    flushQueue();
+  }
+
+  /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
+  function requestUpdate(item, newTime, newTarget, newContent) {
+    mutatePendingAddOrEnqueue(item.id, function (addOp) {
+      addOp.payload.time = newTime;
+      addOp.payload.target = newTarget;
+      addOp.payload.content = newContent;
+    }, 'update', {
+      id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
+      base: { time: item.time, target: item.target, content: item.content }
+    });
+  }
+
+  function requestDelete(item) {
+    var addIdx = queue.findIndex(function (q) { return q.type === 'add' && q.tempId === item.id; });
+    if (addIdx !== -1 && !queue[addIdx].sent) {
+      // まだ送信していない自分の追加は、その追加ごと取り消す（この記録に対する後続の操作も不要になる）
+      var tempId = queue[addIdx].tempId;
+      queue = queue.filter(function (q) { return q.tempId !== tempId && q.id !== tempId; });
+      persistStore();
+      render();
+      return;
+    }
+    var realId = resolveId(item.id);
+    queue.push({ opId: uid(), type: 'delete', id: realId, dateKey: item.dateKey, payload: { id: realId, dateKey: item.dateKey } });
+    persistStore();
+    render();
+    flushQueue();
+  }
+
+  function requestToggle(item, checked) {
+    mutatePendingAddOrEnqueue(item.id, function (addOp) {
+      addOp.payload.transcribed = checked;
+    }, 'toggle', { id: item.id, dateKey: item.dateKey, value: checked });
+  }
+
+  // ---------- 同期キュー ----------
+
+  function flushQueue() {
+    if (flushing || queue.length === 0) { setSyncStatus(); return; }
+    flushing = true;
+    setSyncStatus();
+
+    var op = queue[0];
+    var promise;
+    if (op.type === 'add') {
+      // 一度でも送信した追加は、以後書き換えない（タイムアウト後にサーバーへ届いていた場合も、内容がずれないように）
+      if (!op.sent) { op.sent = true; persistStore(); }
+      promise = callServer('addRecord', {
+        clientOpId: op.opId, dateKey: op.dateKey,
+        target: op.payload.target, content: op.payload.content, time: op.payload.time,
+        transcribed: !!op.payload.transcribed
+      });
+    } else if (op.type === 'update') {
+      promise = callServer('updateRecord', op.payload);
+    } else if (op.type === 'delete') {
+      promise = callServer('deleteRecord', op.payload);
+    } else if (op.type === 'toggle') {
+      promise = callServer('toggleTranscribed', op.payload);
+    } else {
+      queue.shift(); flushing = false; persistStore(); flushQueueSoon(); return;
+    }
+
+    promise.then(function (res) {
+      queue.shift();
+      if (op.type === 'add' && res && res.id) rememberRealId(op.tempId, res.id);
+      flushing = false;
+      persistStore();
+      refreshFromServer();
+      if (queue.length > 0) flushQueueSoon(); else setSyncStatus();
+    }).catch(function (err) {
+      flushing = false;
+      // 認可エラー（他人の記録を編集しようとした等）は、キューに残しても解決しないため破棄してエラー表示
+      if (err && err.message && !err.isTimeout && !/^(timeout)$/.test(err.message) && isPermanentError_(err)) {
+        queue.shift();
+        persistStore();
+        if (op.type === 'update' && isConflictError_(err)) {
+          showConflict(op.payload); // 入力した内容は消さずに取り出せるようにする
+          refreshFromServer();
+        } else {
+          showError(err.message);
+        }
+        render();
+        return;
+      }
+      setSyncStatus(); // それ以外（通信不良等）は次回ポーリング／オンライン復帰時に再試行
+    });
+  }
+
+  function isPermanentError_(err) {
+    var msg = String(err.message || '');
+    return msg.indexOf('編集できません') !== -1 ||
+      msg.indexOf('削除できません') !== -1 ||
+      msg.indexOf('登録されていません') !== -1 ||
+      msg.indexOf('内容を入力してください') !== -1 ||
+      msg.indexOf('見つかりませんでした') !== -1 ||
+      isConflictError_(err);
+  }
+
+  function isConflictError_(err) {
+    return String((err && err.message) || '').indexOf('別の端末で先に更新') !== -1;
+  }
+
+  /** 同時編集で保存できなかったとき、入力した内容を失わないよう、案内とコピーボタンを出す */
+  var conflictText = '';
+  function showConflict(payload) {
+    conflictText = String((payload && payload.content) || '');
+    el.conflictMsg.textContent =
+      'この記録は別の端末（または別の画面）で先に更新されていたため、あなたの編集は保存されていません。' +
+      '最新の内容を確認してから、必要なら編集し直してください。あなたが入力した内容は「入力内容をコピー」で取り出せます。';
+    el.conflictBanner.hidden = false;
+  }
+
+  function flushQueueSoon() { setTimeout(flushQueue, 300); }
+
+  function setSyncStatus() {
+    if (queue.length === 0) {
+      el.syncPill.className = 'sync-pill synced';
+      el.syncPillText.textContent = '同期済み';
+    } else if (navigator.onLine === false) {
+      el.syncPill.className = 'sync-pill offline';
+      el.syncPillText.textContent = 'オフライン・保存待ち ' + queue.length + '件';
+    } else {
+      el.syncPill.className = 'sync-pill pending';
+      el.syncPillText.textContent = '送信中… 残り' + queue.length + '件';
+    }
+  }
+
+  // ---------- 表示 ----------
+
+  function populateSelect(select, options, keepValue) {
+    var prev = keepValue ? select.value : null;
+    select.innerHTML = '';
+    options.forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      select.appendChild(o);
+    });
+    if (prev && options.indexOf(prev) !== -1) select.value = prev;
+  }
+
+  /** サーバーの最新記録 + 未送信キューを合成して表示用リストを作る */
+  function computeView() {
+    var map = {};
+    baseRecords.forEach(function (r) { map[r.id] = Object.assign({}, r); });
+
+    queue.forEach(function (op) {
+      if (op.dateKey !== viewDateKey) return; // 別の日の未送信操作は、その日を表示したときだけ反映する
+      if (op.type === 'add') {
+        map[op.tempId] = {
+          id: op.tempId, dateKey: op.dateKey, time: op.payload.time,
+          staffName: me.staffName, staffColor: me.staffColor || '', staffEmail: me.email,
+          target: op.payload.target, content: op.payload.content,
+          transcribed: !!op.payload.transcribed, canEdit: true, _pending: true
+        };
+      } else if (op.type === 'update' && map[op.id]) {
+        map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
+      } else if (op.type === 'delete') {
+        delete map[op.id];
+      } else if (op.type === 'toggle' && map[op.id]) {
+        map[op.id] = Object.assign({}, map[op.id], { transcribed: op.payload.value, _pending: true });
+      }
+    });
+
+    var list = Object.keys(map).map(function (k) { return map[k]; });
+    list.sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    return list;
+  }
+
+  function render() {
+    setSyncStatus();
+    if (!me) return;
+    if (viewMode !== 'day') return; // 絞り込み画面を表示中は、日ごとの一覧を作り直さない
+    // 編集フォームを開いている間は画面を作り直さない（作り直すと入力中の文字が消え、キーボードも閉じてしまう）
+    if (editingId) return;
+    var records = computeView();
+
+    el.timeline.hidden = false;
+    el.emptyMsg.hidden = records.length !== 0;
+    el.timeline.innerHTML = '';
+
+    records.forEach(function (item) {
+      el.timeline.appendChild(buildEntry(item, false));
+    });
+    refreshClamp(el.timeline);
+  }
+
+  /**
+   * 記録1件の表示を作る。inResults=true は絞り込み結果用。
+   * どちらの画面でも「コピー」（内容だけ）・「転記済み」のチェック・本人の記録の編集と削除ができる。
+   */
+  function buildEntry(item, inResults) {
+    var li = document.createElement('li');
+    li.className = 'entry' + (item._pending ? ' is-pending' : '');
+    var ops = '<button class="op-btn copy-btn">コピー</button>';
+    ops += item.canEdit
+      ? '<button class="op-btn edit-btn">編集</button><button class="op-btn danger del-btn">削除</button>'
+      : '<span class="locked-note">本人のみ編集可</span>';
+    li.innerHTML =
+      '<div class="entry-time">' + escapeHtml(item.time) + '</div>' +
+      '<div class="entry-card">' +
+        '<div class="entry-meta">' +
+          '<span class="chip chip-target">' + escapeHtml(item.target) + '</span>' +
+          '<span class="chip chip-staff"' + (colorKey(item.staffColor) ? ' data-color="' + colorKey(item.staffColor) + '"' : '') + '>' + escapeHtml(item.staffName) + '</span>' +
+          (item.canEdit && !item._pending ? '<span class="chip chip-mine">自分の記録</span>' : '') +
+          (item._pending ? '<span class="chip chip-pending">未送信</span>' : '') +
+        '</div>' +
+        '<div class="entry-view">' +
+          '<div class="entry-content" data-id="' + escapeHtml(String(item.id)) + '">' + escapeHtml(item.content) + '</div>' +
+          '<button type="button" class="more-btn" hidden>続きを表示 ▼</button>' +
+          '<div class="entry-foot">' +
+            '<label class="transcribe-label' + (item.transcribed ? ' done' : '') + '">' +
+              '<input type="checkbox" class="transcribe-check"' + (item.transcribed ? ' checked' : '') + '> 福祉見聞録へ転記済み' +
+            '</label>' +
+            '<div class="entry-ops">' + ops + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var card = li.querySelector('.entry-card');
+
+    card.querySelector('.transcribe-check').addEventListener('change', function (e) {
+      var checked = e.target.checked;
+      if (inResults) {
+        item.transcribed = checked; // 印刷にも反映されるよう、絞り込み結果の側も更新しておく
+        e.target.parentNode.className = 'transcribe-label' + (checked ? ' done' : '');
+      }
+      requestToggle(item, checked);
+    });
+
+    card.querySelector('.copy-btn').addEventListener('click', function () { copyText(String(item.content || '')); });
+    card.querySelector('.more-btn').addEventListener('click', function () {
+      expandedIds[item.id] = !expandedIds[item.id];
+      refreshClamp(card);
+    });
+
+    if (item.canEdit) {
+      card.querySelector('.edit-btn').addEventListener('click', function () {
+        enterEditMode(card, item, inResults ? afterResultEdit : null);
+      });
+      card.querySelector('.del-btn').addEventListener('click', function () {
+        if (!confirm('この記録を削除します。よろしいですか？')) return;
+        requestDelete(item);
+        if (inResults && lastSearch) {
+          // 絞り込み結果からも取り除く（印刷にも反映される）
+          lastSearch.records = lastSearch.records.filter(function (r) { return r !== item; });
+          renderResults();
+        }
+      });
+    }
+    return li;
+  }
+
+  /** 絞り込み結果で編集を保存／キャンセルしたあと、結果の一覧を描き直す */
+  function afterResultEdit(saved, item, values) {
+    if (saved) {
+      item.time = values.time;
+      item.target = values.target;
+      item.content = values.content;
+      lastSearch.records.sort(function (a, b) {
+        if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
+        return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+      });
+    }
+    renderResults();
+  }
+
+  // ---------- コピー ----------
+
+  var toastTimer = null;
+  function showToast(msg) {
+    el.toast.textContent = msg;
+    el.toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.toast.hidden = true; }, 1800);
+  }
+
+  /** 記録の内容だけをコピーする（対象者・時刻は含めない） */
+  function copyText(text) {
+    var done = function (ok) { showToast(ok ? 'コピーしました' : 'コピーできませんでした'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(fallbackCopy(text)); });
+        return;
+      }
+    } catch (e) { /* 下の方法で試す */ }
+    done(fallbackCopy(text));
+  }
+
+  /** 古い端末や、クリップボードの利用が制限された画面向けのコピー */
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  // ---------- 絞り込み・印刷 ----------
+
+  function setMode(mode) {
+    viewMode = mode;
+    var isDay = mode === 'day';
+    el.modeDayBtn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
+    el.modeFilterBtn.setAttribute('aria-pressed', isDay ? 'false' : 'true');
+    el.dateNav.hidden = !isDay;
+    el.composeCard.hidden = !isDay || !me;
+    el.filterCard.hidden = isDay;
+    el.resultSummary.hidden = isDay || !lastSearch;
+    el.results.hidden = isDay || !lastSearch;
+    if (isDay) {
+      el.loadingMsg.hidden = !!me;
+      render();
+    } else {
+      el.loadingMsg.hidden = true;
+      el.timeline.hidden = true;
+      el.emptyMsg.hidden = true;
+    }
+    window.scrollTo(0, 0);
+  }
+
+  function fillSelect(select, options) {
+    var prev = select.value;
+    select.innerHTML = '';
+    var all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'すべて';
+    select.appendChild(all);
+    options.forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      select.appendChild(o);
+    });
+    if (prev && options.indexOf(prev) !== -1) select.value = prev;
+  }
+
+  function populateFilterSelects() {
+    fillSelect(el.fTarget, targetList);
+    fillSelect(el.fStaff, staffNameList);
+  }
+
+  function shortDateLabel(key) {
+    var p = key.split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return Number(p[1]) + '/' + Number(p[2]) + '(' + '日月火水木金土'.charAt(d.getDay()) + ')';
+  }
+
+  function doSearch() {
+    clearError();
+    var from = el.fFrom.value, to = el.fTo.value;
+    if (!from || !to) { showError('開始日と終了日を指定してください。'); return; }
+    if (from > to) { var tmp = from; from = to; to = tmp; el.fFrom.value = from; el.fTo.value = to; }
+    var p1 = from.split('-'), p2 = to.split('-');
+    var days = Math.round((new Date(+p2[0], +p2[1] - 1, +p2[2]) - new Date(+p1[0], +p1[1] - 1, +p1[2])) / 86400000) + 1;
+    if (days > SEARCH_MAX_DAYS) { showError('期間は' + SEARCH_MAX_DAYS + '日（約3か月）以内で指定してください。'); return; }
+
+    var q = {
+      from: from, to: to,
+      target: el.fTarget.value, staff: el.fStaff.value,
+      keyword: el.fKeyword.value.trim(), untranscribedOnly: el.fUntranscribed.checked
+    };
+    el.searchBtn.disabled = true;
+    el.printBtn.disabled = true;
+    el.results.hidden = true;
+    el.resultSummary.hidden = false;
+    el.resultSummary.textContent = '検索中…（期間が長いと時間がかかります）';
+
+    callServer('searchRecords', q, SEARCH_TIMEOUT_MS).then(function (res) {
+      el.searchBtn.disabled = false;
+      lastSearch = { q: q, records: (res && res.records) || [], truncated: !!(res && res.truncated) };
+      if (viewMode === 'filter') renderResults();
+    }).catch(function (err) {
+      el.searchBtn.disabled = false;
+      el.resultSummary.textContent = '';
+      el.resultSummary.hidden = true;
+      showError(err && err.isTimeout
+        ? '検索に時間がかかりすぎました。期間を短くして、もう一度お試しください。'
+        : ((err && err.message) || '検索できませんでした。電波の良い場所でもう一度お試しください。'));
+    });
+  }
+
+  function renderResults() {
+    var recs = lastSearch.records;
+    el.resultSummary.hidden = false;
+    el.resultSummary.textContent = recs.length
+      ? recs.length + '件' + (lastSearch.truncated ? '（件数が多いため、先頭の' + recs.length + '件だけを表示しています。条件を絞ってください）' : '')
+      : '条件に合う記録はありませんでした。';
+    el.results.innerHTML = '';
+    var currentDate = null, list = null;
+    recs.forEach(function (item) {
+      if (item.dateKey !== currentDate) {
+        currentDate = item.dateKey;
+        var head = document.createElement('h3');
+        head.className = 'day-head';
+        head.textContent = dateKeyLabel(currentDate);
+        el.results.appendChild(head);
+        list = document.createElement('ul');
+        list.className = 'timeline';
+        el.results.appendChild(list);
+      }
+      list.appendChild(buildEntry(item, true));
+    });
+    el.results.hidden = false;
+    refreshClamp(el.results);
+    el.printBtn.disabled = recs.length === 0;
+  }
+
+  /** 絞り込み結果を、印刷用の表にして印刷する（A4縦） */
+  function doPrint() {
+    if (!lastSearch || !lastSearch.records.length) return;
+    var q = lastSearch.q;
+    var cond = [
+      '期間：' + dateKeyLabel(q.from) + ' 〜 ' + dateKeyLabel(q.to),
+      '対象者：' + (q.target || 'すべて'),
+      '記録者：' + (q.staff || 'すべて')
+    ];
+    if (q.keyword) cond.push('キーワード：「' + q.keyword + '」');
+    if (q.untranscribedOnly) cond.push('未転記のみ');
+    var now = new Date();
+    var printedAt = now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + nowHHMM();
+    var rows = lastSearch.records.map(function (r) {
+      return '<tr>' +
+        '<td>' + escapeHtml(shortDateLabel(r.dateKey)) + '</td>' +
+        '<td>' + escapeHtml(r.time) + '</td>' +
+        '<td>' + escapeHtml(r.target) + '</td>' +
+        '<td>' + escapeHtml(r.staffName) + '</td>' +
+        '<td class="c">' + escapeHtml(r.content) + '</td>' +
+        '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
+      '</tr>';
+    }).join('');
+    el.printView.innerHTML =
+      '<h1 class="pv-title">ボヤージュ支援記録ノート　記録一覧</h1>' +
+      '<p class="pv-cond">' + escapeHtml(cond.join('　／　')) + '</p>' +
+      '<p class="pv-meta">' + lastSearch.records.length + '件' +
+        (lastSearch.truncated ? '（件数が多いため一部のみ）' : '') +
+        '　印刷日時：' + escapeHtml(printedAt) + '</p>' +
+      '<table class="pv-table">' +
+        '<colgroup><col style="width:5.4em"><col style="width:3.6em"><col style="width:7.5em"><col style="width:6.5em"><col><col style="width:3.4em"></colgroup>' +
+        '<thead><tr><th>日付</th><th>時刻</th><th>対象者</th><th>記録者</th><th>内容</th><th>転記</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
+    window.print();
+  }
+
+  /** onClose(saved, item, values) を渡すと、保存／キャンセル後の描き直しをその関数に任せる（絞り込み結果用） */
+  function enterEditMode(card, item, onClose) {
+    editingId = item.id;
+    var viewEl = card.querySelector('.entry-view');
+    var targetOptions = Array.from(el.targetSelect.options).map(function (o) { return o.value; });
+    viewEl.outerHTML =
+      '<div class="edit-form">' +
+        '<div class="field-row">' +
+          '<div><label class="hint">対象者</label><select class="edit-target"></select></div>' +
+          '<div><label class="hint">時刻</label><input type="time" class="edit-time" value="' + escapeHtml(item.time) + '"></div>' +
+        '</div>' +
+        '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
+        '<div class="edit-actions">' +
+          '<button class="op-btn cancel-btn">キャンセル</button>' +
+          '<button class="op-btn save save-btn">保存</button>' +
+        '</div>' +
+      '</div>';
+
+    populateSelect(card.querySelector('.edit-target'), targetOptions);
+    card.querySelector('.edit-target').value = item.target;
+    applyTimeMode(card.querySelector('.edit-time'));
+
+    card.querySelector('.cancel-btn').addEventListener('click', function () {
+      editingId = null;
+      if (onClose) onClose(false, item); else render();
+    });
+    card.querySelector('.save-btn').addEventListener('click', function () {
+      var content = card.querySelector('.edit-content').value.trim();
+      if (!content) return;
+      var timeEl = card.querySelector('.edit-time');
+      var time = readTimeInput(timeEl);
+      if (!time) {
+        timeEl.classList.add('invalid');
+        showError('時刻は「0930」のように4桁の数字で入力してください（例：0930 → 09:30）。');
+        timeEl.focus();
+        return;
+      }
+      var values = { time: time, target: card.querySelector('.edit-target').value, content: content };
+      editingId = null;
+      requestUpdate(item, values.time, values.target, values.content); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      if (onClose) onClose(true, item, values);
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
