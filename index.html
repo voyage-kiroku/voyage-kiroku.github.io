@@ -133,6 +133,11 @@
   .chip-target { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
   .chip-mine { background: var(--good-soft); color: var(--good); }
   .chip-pending { background: var(--pending-soft); color: var(--pending); }
+  /* タグ（記録の分類）。付いているときだけ札の並びに出す */
+  .chip-tag { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 600; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .tag-btn { font-size: .76rem; font-weight: 700; padding: 6px 11px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+  .tag-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .entry-content { font-size: .92rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
   /* 長い記録は5行で折りたたむ（「続きを表示」で全文） */
   .entry-content:empty { display: none; } /* 写真だけの記録 */
@@ -344,6 +349,10 @@
     </div>
     <label class="hint" for="contentInput">内容</label>
     <textarea id="contentInput" placeholder="例）居室にて体温測定 36.4℃。食欲あり、昼食は全量摂取。"></textarea>
+    <div id="tagBox" hidden>
+      <span class="hint">タグ（任意・複数選べます）</span>
+      <div class="tag-row" id="tagRow"></div>
+    </div>
     <div class="photo-row" id="photoRow" hidden>
       <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
       <input type="file" id="photoInput" accept="image/*" multiple hidden>
@@ -374,6 +383,8 @@
     <select id="fTarget"></select>
     <label class="hint" for="fStaff">記録者（職員）</label>
     <select id="fStaff"></select>
+    <label class="hint" for="fTag">タグ</label>
+    <select id="fTag"></select>
     <label class="hint" for="fKeyword">キーワード（内容に含む言葉）</label>
     <input type="search" id="fKeyword" placeholder="例）通院" enterkeyhint="search">
     <label class="check-label"><input type="checkbox" id="fUntranscribed"> 未転記の記録だけ</label>
@@ -418,6 +429,8 @@
   var viewMode = 'day';       // 'day'（日ごと） / 'filter'（絞り込み・印刷）
   var targetList = [];        // 対象者（利用者）の一覧
   var staffNameList = [];     // 記録者（職員）の一覧
+  var tagList = [];           // タグの一覧（タグマスタ）
+  var composeTags = [];       // 新しい記録に付けるタグ
   var lastSearch = null;      // 直近の絞り込み結果 { q, records, truncated }
   var SEARCH_TIMEOUT_MS = 120000; // 絞り込みは月ファイルのタブを順に読むため長めに待つ
   var SEARCH_MAX_DAYS = 93;
@@ -461,6 +474,9 @@
     fTo: document.getElementById('fTo'),
     fTarget: document.getElementById('fTarget'),
     fStaff: document.getElementById('fStaff'),
+    fTag: document.getElementById('fTag'),
+    tagBox: document.getElementById('tagBox'),
+    tagRow: document.getElementById('tagRow'),
     fKeyword: document.getElementById('fKeyword'),
     fUntranscribed: document.getElementById('fUntranscribed'),
     searchBtn: document.getElementById('searchBtn'),
@@ -668,12 +684,12 @@
     try {
       var raw = localStorage.getItem(STORE_KEY);
       var s = raw ? JSON.parse(raw) : {};
-      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [] };
-    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [] }; }
+      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [], tags: s.tags || [] };
+    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [], tags: [] }; }
   }
   function persistStore() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList }));
     } catch (e) { /* 容量不足・プライベートモード等は無視 */ }
   }
 
@@ -752,7 +768,7 @@
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
         return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
-          targets: res.targets, staffNames: res.staffNames, dateKey: res.dateKey, records: res.records };
+          targets: res.targets, staffNames: res.staffNames, tags: res.tags, dateKey: res.dateKey, records: res.records };
       }
       return res;
     });
@@ -878,7 +894,9 @@
     // 対象者・記録者の一覧も端末に覚えておき、通信できないまま開いたときも入力できるようにする
     targetList = stored.targets || [];
     staffNameList = stored.staffNames || [];
+    tagList = stored.tags || [];
     if (targetList.length) populateSelect(el.targetSelect, targetList, true);
+    renderComposeTags();
     if (!el.timeInput.value) el.timeInput.value = nowHHMM();
     if (!el.submitBtn.dataset.bound) {
       el.submitBtn.dataset.bound = '1';
@@ -979,6 +997,8 @@
     if (!el.timeInput.value) el.timeInput.value = nowHHMM();
     targetList = data.targets || [];
     staffNameList = data.staffNames || [];
+    tagList = data.tags || [];
+    renderComposeTags();
     populateFilterSelects();
     persistStore();
 
@@ -1090,10 +1110,13 @@
         content: content,
         time: time,
         transcribed: false,
-        images: composeImages.slice()
+        images: composeImages.slice(),
+        tags: sortTags(composeTags)
       }
     };
     composeImages = [];
+    composeTags = [];
+    renderComposeTags();
     if (ENABLE_IMAGES) renderComposeImages();
     queue.push(op);
     persistStore();
@@ -1131,17 +1154,19 @@
 
   /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
   /** newImages を渡したときだけ画像も差し替える（Googleログイン版では渡さないので、画像はそのまま） */
-  function requestUpdate(item, newTime, newTarget, newContent, newImages) {
+  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags) {
     var payload = {
       id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
-      base: { time: item.time, target: item.target, content: item.content }
+      base: { time: item.time, target: item.target, content: item.content, tags: item.tags || [] }
     };
     if (newImages) payload.images = newImages;
+    if (newTags) payload.tags = newTags;
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
       addOp.payload.time = newTime;
       addOp.payload.target = newTarget;
       addOp.payload.content = newContent;
       if (newImages) addOp.payload.images = newImages;
+      if (newTags) addOp.payload.tags = newTags;
     }, 'update', payload);
   }
 
@@ -1463,7 +1488,8 @@
         var body = {
           clientOpId: op.opId, dateKey: op.dateKey,
           target: op.payload.target, content: op.payload.content, time: op.payload.time,
-          transcribed: !!op.payload.transcribed
+          transcribed: !!op.payload.transcribed,
+          tags: op.payload.tags || []
         };
         if (op.payload.images && op.payload.images.length) body.images = sentImages(op.payload.images);
         return callServer('addRecord', body);
@@ -1548,6 +1574,43 @@
     }
   }
 
+  // ---------- タグ ----------
+
+  /**
+   * タグの選択ボタンを並べる。selected（配列）をその場で書き換える。
+   * タグマスタから消えたタグでも、付いていれば外せるように表示する。
+   */
+  function renderTagButtons(row, selected) {
+    var names = tagList.slice();
+    selected.forEach(function (t) { if (names.indexOf(t) === -1) names.push(t); });
+    row.innerHTML = '';
+    row.hidden = names.length === 0;
+    names.forEach(function (name) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tag-btn';
+      b.textContent = name;
+      b.setAttribute('aria-pressed', selected.indexOf(name) !== -1 ? 'true' : 'false');
+      b.addEventListener('click', function () {
+        var i = selected.indexOf(name);
+        if (i === -1) selected.push(name); else selected.splice(i, 1);
+        b.setAttribute('aria-pressed', i === -1 ? 'true' : 'false');
+      });
+      row.appendChild(b);
+    });
+  }
+
+  /** 選んだ順ではなく、タグマスタの順に並べる（マスタにないタグは後ろ） */
+  function sortTags(list) {
+    var order = function (t) { var i = tagList.indexOf(t); return i === -1 ? tagList.length : i; };
+    return list.slice().sort(function (a, b) { return order(a) - order(b); });
+  }
+
+  function renderComposeTags() {
+    el.tagBox.hidden = tagList.length === 0;
+    renderTagButtons(el.tagRow, composeTags);
+  }
+
   // ---------- 表示 ----------
 
   function populateSelect(select, options, keepValue) {
@@ -1573,11 +1636,12 @@
           id: op.tempId, dateKey: op.dateKey, time: op.payload.time,
           staffName: me.staffName, staffColor: me.staffColor || '', staffEmail: me.email,
           target: op.payload.target, content: op.payload.content,
-          transcribed: !!op.payload.transcribed, images: op.payload.images || [], canEdit: true, _pending: true
+          transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [], canEdit: true, _pending: true
         };
       } else if (op.type === 'update' && map[op.id]) {
         map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
         if (op.payload.images) map[op.id].images = op.payload.images;
+        if (op.payload.tags) map[op.id].tags = op.payload.tags;
       } else if (op.type === 'delete') {
         delete map[op.id];
       } else if (op.type === 'toggle' && map[op.id]) {
@@ -1625,6 +1689,7 @@
         '<div class="entry-meta">' +
           '<span class="chip chip-target">' + escapeHtml(item.target) + '</span>' +
           '<span class="chip chip-staff"' + (colorKey(item.staffColor) ? ' data-color="' + colorKey(item.staffColor) + '"' : '') + '>' + escapeHtml(item.staffName) + '</span>' +
+          (item.tags || []).map(function (t) { return '<span class="chip chip-tag">' + escapeHtml(t) + '</span>'; }).join('') +
           (item.canEdit && !item._pending ? '<span class="chip chip-mine">自分の記録</span>' : '') +
           (item._pending ? '<span class="chip chip-pending">未送信</span>' : '') +
         '</div>' +
@@ -1694,6 +1759,7 @@
       item.target = values.target;
       item.content = values.content;
       if (values.images) item.images = values.images;
+      if (values.tags) item.tags = values.tags;
       lastSearch.records.sort(function (a, b) {
         if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
         return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
@@ -1782,6 +1848,7 @@
   function populateFilterSelects() {
     fillSelect(el.fTarget, targetList);
     fillSelect(el.fStaff, staffNameList);
+    fillSelect(el.fTag, tagList);
   }
 
   function shortDateLabel(key) {
@@ -1801,7 +1868,7 @@
 
     var q = {
       from: from, to: to,
-      target: el.fTarget.value, staff: el.fStaff.value,
+      target: el.fTarget.value, staff: el.fStaff.value, tag: el.fTag.value,
       keyword: el.fKeyword.value.trim(), untranscribedOnly: el.fUntranscribed.checked
     };
     el.searchBtn.disabled = true;
@@ -1859,6 +1926,7 @@
       '対象者：' + (q.target || 'すべて'),
       '記録者：' + (q.staff || 'すべて')
     ];
+    if (q.tag) cond.push('タグ：' + q.tag);
     if (q.keyword) cond.push('キーワード：「' + q.keyword + '」');
     if (q.untranscribedOnly) cond.push('未転記のみ');
     var now = new Date();
@@ -1869,7 +1937,7 @@
         '<td>' + escapeHtml(r.time) + '</td>' +
         '<td>' + escapeHtml(r.target) + '</td>' +
         '<td>' + escapeHtml(r.staffName) + '</td>' +
-        '<td class="c">' + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') + '</td>' +
+        '<td class="c">' + ((r.tags && r.tags.length) ? escapeHtml('【' + r.tags.join('／') + '】') + '<br>' : '') + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') + '</td>' +
         '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
       '</tr>';
     }).join('');
@@ -1899,6 +1967,7 @@
           '<div><label class="hint">時刻</label><input type="time" class="edit-time" value="' + escapeHtml(item.time) + '"></div>' +
         '</div>' +
         '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
+        '<div class="tag-row edit-tags"></div>' +
         (ENABLE_IMAGES
           ? '<div class="photo-row edit-photos"><button type="button" class="photo-btn edit-photo-btn">📷 写真を追加</button>' +
             '<input type="file" class="edit-photo-input" accept="image/*" multiple hidden></div>'
@@ -1912,6 +1981,8 @@
     populateSelect(card.querySelector('.edit-target'), targetOptions);
     card.querySelector('.edit-target').value = item.target;
     applyTimeMode(card.querySelector('.edit-time'));
+    var editTags = (item.tags || []).slice();
+    renderTagButtons(card.querySelector('.edit-tags'), editTags);
 
     var editImages = null;
     var addedInEdit = []; // この編集で新しく選んだ画像（キャンセルしたら端末から消す）
@@ -1947,7 +2018,8 @@
       var values = { time: time, target: card.querySelector('.edit-target').value, content: content };
       editingId = null;
       if (editImages) values.images = editImages;
-      requestUpdate(item, values.time, values.target, values.content, editImages || undefined); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      values.tags = sortTags(editTags);
+      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
       if (onClose) onClose(true, item, values);
     });
   }
