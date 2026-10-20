@@ -930,7 +930,7 @@
       if (e.key === 'Enter') { e.preventDefault(); el.fKeyword.blur(); doSearch(); }
     });
     var today = localDateKey();
-    el.fFrom.value = today.slice(0, 8) + '01'; // 初期値は今月1日〜今日
+    el.fFrom.value = shiftDateKey(today, -1); // 初期値は昨日〜今日
     el.fTo.value = today;
     el.fFrom.max = today;
     el.fTo.max = today;
