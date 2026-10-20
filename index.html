@@ -138,6 +138,11 @@
   .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
   .tag-btn { font-size: .76rem; font-weight: 700; padding: 6px 11px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
   .tag-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  /* タグマスタで「枠の色」を選んだタグ：札・選択ボタン・記録の枠をその色にする */
+  .chip-tag[data-color] { background: var(--c-bg); color: var(--c-ink); border-color: var(--c-ink); }
+  .tag-btn[data-color][aria-pressed="true"] { background: var(--c-bg); color: var(--c-ink); border-color: var(--c-ink); }
+  .entry-card[data-color] { background: var(--c-bg); border: 2px solid var(--c-ink); }
+  .entry.is-pending .entry-card[data-color] { border-style: dashed; }
   .entry-content { font-size: .92rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
   /* 長い記録は5行で折りたたむ（「続きを表示」で全文） */
   .entry-content:empty { display: none; } /* 写真だけの記録 */
@@ -391,6 +396,8 @@
     <select id="fStaff"></select>
     <label class="hint" for="fTag">タグ</label>
     <select id="fTag"></select>
+    <label class="hint" for="fExcludeTag">除くタグ（このタグが付いた記録は出さない）</label>
+    <select id="fExcludeTag"></select>
     <label class="hint" for="fKeyword">キーワード（内容・対象者名に含む言葉）</label>
     <input type="search" id="fKeyword" placeholder="例）通院" enterkeyhint="search">
     <label class="check-label"><input type="checkbox" id="fUntranscribed"> 未転記の記録だけ</label>
@@ -441,6 +448,8 @@
   var targetList = [];        // 対象者（利用者）の一覧
   var staffNameList = [];     // 記録者（職員）の一覧
   var tagList = [];           // タグの一覧（タグマスタ）
+  var tagColors = {};         // タグ名 → 枠の色（タグマスタのB列）
+  var EXCLUDE_TAG_KEY = 'srn.excludeTag'; // 絞り込みの「除くタグ」（毎朝使うので端末に覚えておく）
   var composeTags = [];       // 新しい記録に付けるタグ
   var lastSearch = null;      // 直近の絞り込み結果 { q, records, truncated }
   var pagerTarget = '';       // 絞り込み結果を利用者ごとにめくって見ているときの対象者（'' はすべて）
@@ -487,6 +496,7 @@
     fTarget: document.getElementById('fTarget'),
     fStaff: document.getElementById('fStaff'),
     fTag: document.getElementById('fTag'),
+    fExcludeTag: document.getElementById('fExcludeTag'),
     tagBox: document.getElementById('tagBox'),
     tagRow: document.getElementById('tagRow'),
     fKeyword: document.getElementById('fKeyword'),
@@ -701,12 +711,12 @@
     try {
       var raw = localStorage.getItem(STORE_KEY);
       var s = raw ? JSON.parse(raw) : {};
-      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [], tags: s.tags || [] };
-    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [], tags: [] }; }
+      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [], tags: s.tags || [], tagColors: s.tagColors || {} };
+    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [], tags: [], tagColors: {} }; }
   }
   function persistStore() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList, tagColors: tagColors }));
     } catch (e) { /* 容量不足・プライベートモード等は無視 */ }
   }
 
@@ -785,7 +795,7 @@
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
         return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
-          targets: res.targets, staffNames: res.staffNames, tags: res.tags, dateKey: res.dateKey, records: res.records };
+          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, dateKey: res.dateKey, records: res.records };
       }
       return res;
     });
@@ -912,6 +922,7 @@
     targetList = stored.targets || [];
     staffNameList = stored.staffNames || [];
     tagList = stored.tags || [];
+    tagColors = stored.tagColors || {};
     if (targetList.length) populateSelect(el.targetSelect, targetList, true);
     renderComposeTags();
     if (!el.timeInput.value) el.timeInput.value = nowHHMM();
@@ -943,6 +954,9 @@
     el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
     el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
     el.printBtn.addEventListener('click', doPrint);
+    el.fExcludeTag.addEventListener('change', function () {
+      try { localStorage.setItem(EXCLUDE_TAG_KEY, el.fExcludeTag.value); } catch (e) { /* 覚えられなくても動く */ }
+    });
     el.pagerSelect.addEventListener('change', function () { showPagerTarget(el.pagerSelect.value); });
     el.pagerPrev.addEventListener('click', function () { stepPager(-1); });
     el.pagerNext.addEventListener('click', function () { stepPager(1); });
@@ -1018,6 +1032,7 @@
     targetList = data.targets || [];
     staffNameList = data.staffNames || [];
     tagList = data.tags || [];
+    tagColors = data.tagColors || {};
     renderComposeTags();
     populateFilterSelects();
     persistStore();
@@ -1610,6 +1625,7 @@
       b.type = 'button';
       b.className = 'tag-btn';
       b.textContent = name;
+      if (tagColorKey(name)) b.setAttribute('data-color', tagColorKey(name));
       b.setAttribute('aria-pressed', selected.indexOf(name) !== -1 ? 'true' : 'false');
       b.addEventListener('click', function () {
         var i = selected.indexOf(name);
@@ -1624,6 +1640,21 @@
   function sortTags(list) {
     var order = function (t) { var i = tagList.indexOf(t); return i === -1 ? tagList.length : i; };
     return list.slice().sort(function (a, b) { return order(a) - order(b); });
+  }
+
+  /** タグの「枠の色」を画面のパレットのキーにする（色のないタグは ''） */
+  function tagColorKey(name) {
+    return tagColors[name] ? colorKey(tagColors[name]) : '';
+  }
+
+  /** 記録の枠の色：付いているタグのうち、タグマスタで上にある色付きタグの色 */
+  function recordColorKey(tags) {
+    var list = sortTags(tags || []);
+    for (var i = 0; i < list.length; i++) {
+      var k = tagColorKey(list[i]);
+      if (k) return k;
+    }
+    return '';
   }
 
   function renderComposeTags() {
@@ -1709,7 +1740,10 @@
         '<div class="entry-meta">' +
           '<span class="chip chip-target">' + escapeHtml(item.target) + '</span>' +
           '<span class="chip chip-staff"' + (colorKey(item.staffColor) ? ' data-color="' + colorKey(item.staffColor) + '"' : '') + '>' + escapeHtml(item.staffName) + '</span>' +
-          (item.tags || []).map(function (t) { return '<span class="chip chip-tag">' + escapeHtml(t) + '</span>'; }).join('') +
+          (item.tags || []).map(function (t) {
+            var k = tagColorKey(t);
+            return '<span class="chip chip-tag"' + (k ? ' data-color="' + k + '"' : '') + '>' + escapeHtml(t) + '</span>';
+          }).join('') +
           (item.canEdit && !item._pending ? '<span class="chip chip-mine">自分の記録</span>' : '') +
           (item._pending ? '<span class="chip chip-pending">未送信</span>' : '') +
         '</div>' +
@@ -1727,6 +1761,8 @@
       '</div>';
 
     var card = li.querySelector('.entry-card');
+    var cardColor = recordColorKey(item.tags);
+    if (cardColor) card.setAttribute('data-color', cardColor);
 
     card.querySelector('.transcribe-check').addEventListener('change', function (e) {
       var checked = e.target.checked;
@@ -1870,6 +1906,24 @@
     fillSelect(el.fTarget, targetList);
     fillSelect(el.fStaff, staffNameList);
     fillSelect(el.fTag, tagList);
+    fillExcludeTagSelect();
+  }
+
+  function fillExcludeTagSelect() {
+    var saved = '';
+    try { saved = localStorage.getItem(EXCLUDE_TAG_KEY) || ''; } catch (e) { /* 覚えられなくても動く */ }
+    var prev = el.fExcludeTag.value || saved;
+    el.fExcludeTag.innerHTML = '';
+    var none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'なし';
+    el.fExcludeTag.appendChild(none);
+    tagList.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      el.fExcludeTag.appendChild(o);
+    });
+    if (prev && tagList.indexOf(prev) !== -1) el.fExcludeTag.value = prev;
   }
 
   function shortDateLabel(key) {
@@ -1889,7 +1943,7 @@
 
     var q = {
       from: from, to: to,
-      target: el.fTarget.value, staff: el.fStaff.value, tag: el.fTag.value,
+      target: el.fTarget.value, staff: el.fStaff.value, tag: el.fTag.value, excludeTag: el.fExcludeTag.value,
       keyword: el.fKeyword.value.trim(), untranscribedOnly: el.fUntranscribed.checked
     };
     el.searchBtn.disabled = true;
@@ -2026,6 +2080,7 @@
       '記録者：' + (q.staff || 'すべて')
     ];
     if (q.tag) cond.push('タグ：' + q.tag);
+    if (q.excludeTag) cond.push('除くタグ：' + q.excludeTag);
     if (q.keyword) cond.push('キーワード：「' + q.keyword + '」');
     if (q.untranscribedOnly) cond.push('未転記のみ');
     var now = new Date();
