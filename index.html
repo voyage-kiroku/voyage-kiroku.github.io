@@ -385,7 +385,7 @@
     <select id="fStaff"></select>
     <label class="hint" for="fTag">タグ</label>
     <select id="fTag"></select>
-    <label class="hint" for="fKeyword">キーワード（内容に含む言葉）</label>
+    <label class="hint" for="fKeyword">キーワード（内容・対象者名に含む言葉）</label>
     <input type="search" id="fKeyword" placeholder="例）通院" enterkeyhint="search">
     <label class="check-label"><input type="checkbox" id="fUntranscribed"> 未転記の記録だけ</label>
     <div class="compose-actions">
@@ -1978,6 +1978,8 @@
         '</div>' +
       '</div>';
 
+    // 利用者マスタから外れた（部屋の入れ替わりなど）対象者の記録でも、元の対象者のまま編集できるよう選択肢に加える
+    if (targetOptions.indexOf(item.target) === -1) targetOptions.unshift(item.target);
     populateSelect(card.querySelector('.edit-target'), targetOptions);
     card.querySelector('.edit-target').value = item.target;
     applyTimeMode(card.querySelector('.edit-time'));
