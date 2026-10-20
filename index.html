@@ -188,6 +188,12 @@
   .btn-secondary:disabled, .btn-primary:disabled { opacity: .45; cursor: default; }
   .filter-note { font-size: .7rem; color: var(--muted); margin: 0 0 4px; }
   .result-summary { margin: 14px 18px 0; font-size: .82rem; color: var(--muted); }
+  /* 利用者ごとにめくる（朝の申し送り用）。スクロールしても上に残る */
+  .result-pager { position: sticky; z-index: 10; display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 8px 18px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .result-pager select { flex: 1; min-width: 0; height: 2.75rem; font-weight: 700; }
+  .result-pager .nav-btn { width: 2.75rem; height: 2.75rem; flex: none; font-size: 1.4rem; }
+  .pager-empty { margin: 24px 18px; text-align: center; color: var(--muted); font-size: .88rem; }
+  @media print { .result-pager { display: none !important; } }
   .day-head { margin: 18px 18px 0; padding-bottom: 4px; font-size: .9rem; font-weight: 700; border-bottom: 1px solid var(--line); }
   #results .timeline { margin-top: 10px; }
   .toast {
@@ -393,6 +399,11 @@
       <button type="button" class="btn-primary" id="searchBtn">検索</button>
     </div>
   </div>
+  <div class="result-pager" id="resultPager" hidden>
+    <button type="button" class="nav-btn" id="pagerPrev" aria-label="前の利用者">‹</button>
+    <select id="pagerSelect" aria-label="表示する利用者"></select>
+    <button type="button" class="nav-btn" id="pagerNext" aria-label="次の利用者">›</button>
+  </div>
   <p class="result-summary" id="resultSummary" hidden></p>
   <div id="results" hidden></div>
 
@@ -432,6 +443,7 @@
   var tagList = [];           // タグの一覧（タグマスタ）
   var composeTags = [];       // 新しい記録に付けるタグ
   var lastSearch = null;      // 直近の絞り込み結果 { q, records, truncated }
+  var pagerTarget = '';       // 絞り込み結果を利用者ごとにめくって見ているときの対象者（'' はすべて）
   var SEARCH_TIMEOUT_MS = 120000; // 絞り込みは月ファイルのタブを順に読むため長めに待つ
   var SEARCH_MAX_DAYS = 93;
 
@@ -482,6 +494,11 @@
     searchBtn: document.getElementById('searchBtn'),
     printBtn: document.getElementById('printBtn'),
     resultSummary: document.getElementById('resultSummary'),
+    resultPager: document.getElementById('resultPager'),
+    pagerPrev: document.getElementById('pagerPrev'),
+    pagerSelect: document.getElementById('pagerSelect'),
+    pagerNext: document.getElementById('pagerNext'),
+    topbar: document.querySelector('.topbar'),
     results: document.getElementById('results'),
     printView: document.getElementById('printView'),
     toast: document.getElementById('toast'),
@@ -926,6 +943,9 @@
     el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
     el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
     el.printBtn.addEventListener('click', doPrint);
+    el.pagerSelect.addEventListener('change', function () { showPagerTarget(el.pagerSelect.value); });
+    el.pagerPrev.addEventListener('click', function () { stepPager(-1); });
+    el.pagerNext.addEventListener('click', function () { stepPager(1); });
     el.fKeyword.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); el.fKeyword.blur(); doSearch(); }
     });
@@ -1819,6 +1839,7 @@
     el.filterCard.hidden = isDay;
     el.resultSummary.hidden = isDay || !lastSearch;
     el.results.hidden = isDay || !lastSearch;
+    el.resultPager.hidden = isDay || !lastSearch || !pagerOptions().length;
     if (isDay) {
       el.loadingMsg.hidden = !!me;
       render();
@@ -1874,12 +1895,14 @@
     el.searchBtn.disabled = true;
     el.printBtn.disabled = true;
     el.results.hidden = true;
+    el.resultPager.hidden = true;
     el.resultSummary.hidden = false;
     el.resultSummary.textContent = '検索中…（期間が長いと時間がかかります）';
 
     callServer('searchRecords', q, SEARCH_TIMEOUT_MS).then(function (res) {
       el.searchBtn.disabled = false;
       lastSearch = { q: q, records: (res && res.records) || [], truncated: !!(res && res.truncated) };
+      pagerTarget = '';
       if (viewMode === 'filter') renderResults();
     }).catch(function (err) {
       el.searchBtn.disabled = false;
@@ -1891,12 +1914,86 @@
     });
   }
 
+  /**
+   * 「対象者：すべて」で検索したときに、利用者ごとにめくるための選択肢。
+   * 利用者マスタの順（記録のない利用者も含む）に、マスタにない対象者の記録があれば後ろに足す。
+   */
+  function pagerOptions() {
+    if (!lastSearch || lastSearch.q.target || !lastSearch.records.length) return [];
+    var names = targetList.slice();
+    lastSearch.records.forEach(function (r) {
+      var t = String(r.target || '');
+      if (names.indexOf(t) === -1) names.push(t);
+    });
+    return names;
+  }
+
+  function visibleResults() {
+    if (!pagerTarget) return lastSearch.records;
+    return lastSearch.records.filter(function (r) { return String(r.target || '') === pagerTarget; });
+  }
+
+  function renderPager() {
+    var names = pagerOptions();
+    el.resultPager.hidden = names.length === 0;
+    if (!names.length) { pagerTarget = ''; return; }
+    if (pagerTarget && names.indexOf(pagerTarget) === -1) pagerTarget = '';
+    var count = {};
+    lastSearch.records.forEach(function (r) { var t = String(r.target || ''); count[t] = (count[t] || 0) + 1; });
+    el.pagerSelect.innerHTML = '';
+    var all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'すべての利用者（' + lastSearch.records.length + '件）';
+    el.pagerSelect.appendChild(all);
+    names.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t;
+      o.textContent = (t || '（対象者なし）') + '（' + (count[t] || 0) + '件）';
+      el.pagerSelect.appendChild(o);
+    });
+    el.pagerSelect.value = pagerTarget;
+    var i = pagerTarget ? names.indexOf(pagerTarget) : -1;
+    el.pagerPrev.disabled = i === -1;            // 「すべて」より前はない
+    el.pagerNext.disabled = i === names.length - 1;
+    // 上の見出し（日付・ボタンの帯）の下に貼り付くようにする
+    el.resultPager.style.top = (el.topbar ? el.topbar.offsetHeight : 0) + 'px';
+  }
+
+  function showPagerTarget(t) {
+    pagerTarget = t || '';
+    renderResults();
+    // 切り替えたら、その人の記録の先頭が見えるようにする
+    var top = el.resultPager.getBoundingClientRect().top;
+    var stickTop = el.topbar ? el.topbar.offsetHeight : 0;
+    if (top < stickTop - 1 || top > window.innerHeight / 2) {
+      window.scrollTo(0, window.scrollY + top - stickTop);
+    }
+  }
+
+  /** ‹ › で前後の利用者へ（「すべて」から › で先頭の利用者へ） */
+  function stepPager(delta) {
+    var names = pagerOptions();
+    if (!names.length) return;
+    var i = pagerTarget ? names.indexOf(pagerTarget) : -1;
+    var next = i + delta;
+    if (next < 0) { showPagerTarget(''); return; }
+    if (next >= names.length) return;
+    showPagerTarget(names[next]);
+  }
+
   function renderResults() {
-    var recs = lastSearch.records;
+    renderPager();
+    var recs = visibleResults();
     el.resultSummary.hidden = false;
-    el.resultSummary.textContent = recs.length
-      ? recs.length + '件' + (lastSearch.truncated ? '（件数が多いため、先頭の' + recs.length + '件だけを表示しています。条件を絞ってください）' : '')
-      : '条件に合う記録はありませんでした。';
+    if (pagerTarget) {
+      el.resultSummary.textContent = recs.length
+        ? (pagerTarget || '（対象者なし）') + '：' + recs.length + '件'
+        : (pagerTarget || '（対象者なし）') + '：この期間の記録はありません。';
+    } else {
+      el.resultSummary.textContent = recs.length
+        ? recs.length + '件' + (lastSearch.truncated ? '（件数が多いため、先頭の' + recs.length + '件だけを表示しています。条件を絞ってください）' : '')
+        : '条件に合う記録はありませんでした。';
+    }
     el.results.innerHTML = '';
     var currentDate = null, list = null;
     recs.forEach(function (item) {
@@ -1919,11 +2016,13 @@
 
   /** 絞り込み結果を、印刷用の表にして印刷する（A4縦） */
   function doPrint() {
-    if (!lastSearch || !lastSearch.records.length) return;
+    if (!lastSearch) return;
+    var printRecs = visibleResults();
+    if (!printRecs.length) return;
     var q = lastSearch.q;
     var cond = [
       '期間：' + dateKeyLabel(q.from) + ' 〜 ' + dateKeyLabel(q.to),
-      '対象者：' + (q.target || 'すべて'),
+      '対象者：' + (q.target || pagerTarget || 'すべて'),
       '記録者：' + (q.staff || 'すべて')
     ];
     if (q.tag) cond.push('タグ：' + q.tag);
@@ -1931,7 +2030,7 @@
     if (q.untranscribedOnly) cond.push('未転記のみ');
     var now = new Date();
     var printedAt = now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + nowHHMM();
-    var rows = lastSearch.records.map(function (r) {
+    var rows = printRecs.map(function (r) {
       return '<tr>' +
         '<td>' + escapeHtml(shortDateLabel(r.dateKey)) + '</td>' +
         '<td>' + escapeHtml(r.time) + '</td>' +
@@ -1944,7 +2043,7 @@
     el.printView.innerHTML =
       '<h1 class="pv-title">ボヤージュ支援記録ノート　記録一覧</h1>' +
       '<p class="pv-cond">' + escapeHtml(cond.join('　／　')) + '</p>' +
-      '<p class="pv-meta">' + lastSearch.records.length + '件' +
+      '<p class="pv-meta">' + printRecs.length + '件' +
         (lastSearch.truncated ? '（件数が多いため一部のみ）' : '') +
         '　印刷日時：' + escapeHtml(printedAt) + '</p>' +
       '<table class="pv-table">' +
