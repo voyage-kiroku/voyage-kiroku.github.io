@@ -248,6 +248,16 @@
   .viewer-msg:empty { display: none; }
   @media print { .entry-images, .image-note, .viewer, .photo-row { display: none !important; } }
 
+  /* パソコン（横幅900px以上）：左に入力欄・絞り込みの条件、右に記録の一覧。入力欄はスクロールしても動かない */
+  @media (min-width: 900px) {
+    .shell { max-width: 1180px; }
+    .layout { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); column-gap: 6px; align-items: start; }
+    .layout-side { position: sticky; top: var(--topbar-h, 0px); max-height: calc(100vh - var(--topbar-h, 0px)); overflow-y: auto; padding-bottom: 16px; }
+    #contentInput { min-height: 14rem; }
+    .jump-btn { display: none; }
+    .layout-main .timeline { margin-top: 16px; }
+  }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -345,6 +355,8 @@
     </div>
   </div>
 
+  <div class="layout">
+  <div class="layout-side">
   <div class="compose" id="composeCard" hidden>
     <h2 id="composeTitle">新しい記録</h2>
     <div class="field-row">
@@ -376,10 +388,6 @@
     </div>
   </div>
 
-  <p class="loading" id="loadingMsg">読み込み中…</p>
-  <ul class="timeline" id="timeline" hidden></ul>
-  <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
-
   <div class="compose filter-card" id="filterCard" hidden>
     <h2>絞り込み</h2>
     <div class="filter-grid">
@@ -409,6 +417,12 @@
       <button type="button" class="btn-primary" id="searchBtn">検索</button>
     </div>
   </div>
+  </div>
+  <div class="layout-main">
+  <p class="loading" id="loadingMsg">読み込み中…</p>
+  <ul class="timeline" id="timeline" hidden></ul>
+  <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
+
   <div class="result-pager" id="resultPager" hidden>
     <button type="button" class="nav-btn" id="pagerPrev" aria-label="前の利用者">‹</button>
     <select id="pagerSelect" aria-label="表示する利用者"></select>
@@ -416,6 +430,8 @@
   </div>
   <p class="result-summary" id="resultSummary" hidden></p>
   <div id="results" hidden></div>
+  </div>
+  </div>
 
   <div id="printView"></div>
 </div>
@@ -955,6 +971,8 @@
     el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
     el.modeFilterBtn.addEventListener('click', function () { setMode('filter'); });
     el.jumpBtn.addEventListener('click', jumpToInput);
+    updateTopbarHeight();
+    window.addEventListener('resize', updateTopbarHeight);
     el.searchBtn.addEventListener('click', doSearch);
     el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
     el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
@@ -1868,6 +1886,11 @@
     return ok;
   }
 
+  /** パソコン表示で左側（入力欄）を上の帯のすぐ下に貼り付けるため、帯の高さを CSS に渡す */
+  function updateTopbarHeight() {
+    if (el.topbar) document.documentElement.style.setProperty('--topbar-h', el.topbar.offsetHeight + 'px');
+  }
+
   /** 右上のボタン：日ごとの画面では「新しい記録」の欄へ、絞り込みでは条件の欄へ戻る */
   function jumpToInput() {
     var smooth = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -1885,6 +1908,7 @@
     el.modeDayBtn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
     el.modeFilterBtn.setAttribute('aria-pressed', isDay ? 'false' : 'true');
     el.jumpBtn.textContent = isDay ? '✎ 入力へ' : '▲ 条件へ';
+    setTimeout(updateTopbarHeight, 0); // 日付の段が出たり消えたりして帯の高さが変わる
     el.dateNav.hidden = !isDay;
     el.composeCard.hidden = !isDay || !me;
     el.filterCard.hidden = isDay;
