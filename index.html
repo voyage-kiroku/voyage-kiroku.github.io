@@ -2050,6 +2050,26 @@
     showPagerTarget(names[next]);
   }
 
+  var PINNED_TAG = '翌日申し送り';
+
+  /** 記録を日付ごとの見出し付きで結果欄に足す（見出しの頭に prefix を付ける） */
+  function appendDateGroups(recs, prefix) {
+    var currentDate = null, list = null;
+    recs.forEach(function (item) {
+      if (item.dateKey !== currentDate) {
+        currentDate = item.dateKey;
+        var head = document.createElement('h3');
+        head.className = 'day-head';
+        head.textContent = prefix + dateKeyLabel(currentDate);
+        el.results.appendChild(head);
+        list = document.createElement('ul');
+        list.className = 'timeline';
+        el.results.appendChild(list);
+      }
+      list.appendChild(buildEntry(item, true));
+    });
+  }
+
   function renderResults() {
     renderPager();
     var recs = visibleResults();
@@ -2064,20 +2084,10 @@
         : '条件に合う記録はありませんでした。';
     }
     el.results.innerHTML = '';
-    var currentDate = null, list = null;
-    recs.forEach(function (item) {
-      if (item.dateKey !== currentDate) {
-        currentDate = item.dateKey;
-        var head = document.createElement('h3');
-        head.className = 'day-head';
-        head.textContent = dateKeyLabel(currentDate);
-        el.results.appendChild(head);
-        list = document.createElement('ul');
-        list.className = 'timeline';
-        el.results.appendChild(list);
-      }
-      list.appendChild(buildEntry(item, true));
-    });
+    // 利用者ごとにめくっているときは、「翌日申し送り」の記録をその人の一番上にまとめて出す（朝の申し送りで最初に目に入るように）
+    var isPinned = function (r) { return pagerTarget && (r.tags || []).indexOf(PINNED_TAG) !== -1; };
+    appendDateGroups(recs.filter(isPinned), PINNED_TAG + '　');
+    appendDateGroups(recs.filter(function (r) { return !isPinned(r); }), '');
     el.results.hidden = false;
     refreshClamp(el.results);
     el.printBtn.disabled = recs.length === 0;
