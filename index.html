@@ -260,6 +260,10 @@
 
   /* 転記モード：入力欄を隠し、記録だけを幅400px程度で表示する（福祉見聞録の画面と並べて転記するとき用。端末に記憶） */
   #transcribeBtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  /* 「小窓で開く」はパソコン（広い画面）だけ。開いた小窓の中では出さない */
+  #popoutBtn { display: none; }
+  @media (min-width: 900px) { #popoutBtn { display: inline-block; } }
+  body.popout #popoutBtn { display: none !important; }
   body.transcribe-mode .shell { max-width: 420px; }
   body.transcribe-mode #composeCard, body.transcribe-mode .jump-btn { display: none !important; }
   body.transcribe-mode .layout { display: block; }
@@ -347,6 +351,7 @@
     </div>
     <div class="mode-tabs" role="group" aria-label="転記モード">
       <button type="button" class="mode-btn" id="transcribeBtn" aria-pressed="false" title="入力欄を隠し、記録だけを細く表示します（福祉見聞録と並べて転記するとき用）">転記モード</button>
+      <button type="button" class="mode-btn" id="popoutBtn" title="福祉見聞録と並べられる細い別ウィンドウで、転記モードを開きます">小窓で開く</button>
     </div>
     <div class="size-row" role="group" aria-label="文字サイズ">
       <span>文字サイズ</span>
@@ -521,6 +526,7 @@
     modeFilterBtn: document.getElementById('modeFilterBtn'),
     jumpBtn: document.getElementById('jumpBtn'),
     transcribeBtn: document.getElementById('transcribeBtn'),
+    popoutBtn: document.getElementById('popoutBtn'),
     filterCard: document.getElementById('filterCard'),
     fFrom: document.getElementById('fFrom'),
     fTo: document.getElementById('fTo'),
@@ -587,6 +593,31 @@
   // ---------- 転記モード（入力欄を隠して記録だけを細く表示。この端末にだけ記憶する） ----------
 
   var TRANSCRIBE_KEY = 'srn.transcribe';
+  // Googleログイン版の入口（小窓を開くときに使う。画面は Google の枠の中で動くため、自分のアドレスが分からない）
+  var GOOGLE_APP_URL = 'https://script.google.com/macros/s/AKfycbz88AsxpNKFMxjk2XSEJTyfB5gaaNXIdrUNyVOs3YracuVGL1FMd3ZFFhnPiS0TAkPbIw/exec';
+  var isPopout = false; // 「小窓で開く」で開いたウィンドウか（転記モードに固定し、オン・オフを端末に記憶しない）
+
+  /**
+   * 転記用の細い別ウィンドウを、画面の右端に開く。
+   * ブラウザの普通のウィンドウはタブの帯のせいで一定より細くできないが、別ウィンドウ（ポップアップ）なら細くできる。
+   */
+  function openPopout() {
+    var w = 440;
+    var h = screen.availHeight || 900;
+    var left = (screen.availLeft || 0) + (screen.availWidth || 1280) - w;
+    var top = screen.availTop || 0;
+    var isGoogle = typeof google !== 'undefined' && google.script;
+    var url = (isGoogle ? GOOGLE_APP_URL : location.origin + location.pathname) + '?transcribe=1';
+    var win = window.open(url, 'srn-transcribe', 'popup=yes,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
+    if (win) win.focus();
+    else showError('小窓を開けませんでした。ブラウザのアドレス欄の右に出るポップアップの表示を「許可」にしてから、もう一度押してください。');
+  }
+
+  function enterPopout() {
+    isPopout = true;
+    document.body.classList.add('popout');
+    applyTranscribeMode(true);
+  }
   function applyTranscribeMode(on) {
     document.body.classList.toggle('transcribe-mode', on);
     el.transcribeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -600,8 +631,18 @@
     el.transcribeBtn.addEventListener('click', function () {
       var next = !document.body.classList.contains('transcribe-mode');
       applyTranscribeMode(next);
+      if (isPopout) return; // 小窓での切り替えは、元のウィンドウの設定に影響させない
       try { localStorage.setItem(TRANSCRIBE_KEY, next ? '1' : '0'); } catch (e) { /* 同上 */ }
     });
+    el.popoutBtn.addEventListener('click', openPopout);
+    // 「?transcribe=1」付きで開かれたら小窓として扱う（Googleログイン版はアドレスの読み方が違う）
+    if (typeof google !== 'undefined' && google.script && google.script.url) {
+      google.script.url.getLocation(function (loc) {
+        if (loc && loc.parameter && loc.parameter.transcribe === '1') enterPopout();
+      });
+    } else if (/[?&]transcribe=1(&|$)/.test(location.search)) {
+      enterPopout();
+    }
   }
 
   // ---------- 時刻の入力方法（スクロール／直接入力。この端末にだけ記憶する） ----------
