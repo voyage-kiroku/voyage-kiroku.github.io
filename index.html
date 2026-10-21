@@ -601,8 +601,13 @@
    * 転記用の細い別ウィンドウを、画面の右端に開く。
    * ブラウザの普通のウィンドウはタブの帯のせいで一定より細くできないが、別ウィンドウ（ポップアップ）なら細くできる。
    */
+  var POPOUT_WIDTH_KEY = 'srn.popoutWidth'; // 小窓の幅（小窓を手で広げ・縮めたら、次からその幅で開く）
+  var POPOUT_DEFAULT_WIDTH = 380;
+
   function openPopout() {
-    var w = 440;
+    var w = POPOUT_DEFAULT_WIDTH;
+    try { w = Number(localStorage.getItem(POPOUT_WIDTH_KEY)) || w; } catch (e) { /* 記憶できなくても既定の幅で開く */ }
+    w = Math.max(260, Math.min(w, 900));
     var h = screen.availHeight || 900;
     var left = (screen.availLeft || 0) + (screen.availWidth || 1280) - w;
     var top = screen.availTop || 0;
@@ -617,6 +622,14 @@
     isPopout = true;
     document.body.classList.add('popout');
     applyTranscribeMode(true);
+    // 小窓の幅を変えたら覚えておく（window.open の幅は中身の幅なので innerWidth を記憶する）
+    var timer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        try { localStorage.setItem(POPOUT_WIDTH_KEY, String(window.innerWidth)); } catch (e) { /* 記憶できなくても動作に影響なし */ }
+      }, 500);
+    });
   }
   function applyTranscribeMode(on) {
     document.body.classList.toggle('transcribe-mode', on);
