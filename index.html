@@ -255,7 +255,9 @@
 
   /* パソコン（横幅900px以上）：左に入力欄・絞り込みの条件、右に記録の一覧。入力欄はスクロールしても動かない */
   @media (min-width: 900px) {
-    .shell { max-width: 1180px; }
+    /* 下の余白は右側に持たせる（一番下までスクロールしても、左の入力欄が押し上げられないように） */
+    .shell { max-width: 1180px; padding-bottom: 0; }
+    .layout-main { padding-bottom: 96px; }
     .layout { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); column-gap: 6px; align-items: start; }
     .layout-side { position: sticky; top: var(--topbar-h, 0px); max-height: calc(100vh - var(--topbar-h, 0px)); overflow-y: auto; padding-bottom: 16px; }
     #contentInput { min-height: 14rem; }
@@ -273,6 +275,17 @@
   body.transcribe-mode #composeCard, body.transcribe-mode .jump-btn { display: none !important; }
   body.transcribe-mode .layout { display: block; }
   body.transcribe-mode .layout-side { position: static; max-height: none; overflow: visible; padding-bottom: 0; }
+
+  /* 日ごとの一覧：「朝MTG」の記録を隠す切り替え（端末に記憶） */
+  .day-filter { display: flex; justify-content: flex-end; margin: 14px 18px 0; }
+  .mini-toggle { font-size: .74rem; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
+  .mini-toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+  .layout-main .day-filter + .timeline { margin-top: 8px; }
+  /* 右下の「上へ」：パソコン表示と転記モードで、下までスクロールしたときに出す（スマホは右上の「入力へ」で戻れる） */
+  .to-top { position: fixed; right: 20px; bottom: 24px; z-index: 30; display: none; font-size: .82rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 10px 16px; box-shadow: var(--shadow); }
+  @media (min-width: 900px) { .to-top.show { display: block; } }
+  body.transcribe-mode .to-top.show { display: block; }
+  @media print { .to-top, .day-filter { display: none !important; } }
 
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
@@ -440,6 +453,9 @@
   </div>
   <div class="layout-main">
   <p class="loading" id="loadingMsg">読み込み中…</p>
+  <div class="day-filter" id="dayFilterBar" hidden>
+    <button type="button" class="mini-toggle" id="hideMtgBtn" aria-pressed="false"></button>
+  </div>
   <ul class="timeline" id="timeline" hidden></ul>
   <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
 
@@ -456,6 +472,7 @@
   <div id="printView"></div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<button type="button" class="to-top" id="toTopBtn" aria-label="一番上へ戻る">▲ 上へ</button>
 <div class="viewer" id="viewer" role="dialog" aria-label="画像の拡大表示" hidden>
   <p class="viewer-msg" id="viewerMsg"></p>
   <img id="viewerImg" alt="">
@@ -525,6 +542,9 @@
     submitBtn: document.getElementById('submitBtn'),
     loadingMsg: document.getElementById('loadingMsg'),
     timeline: document.getElementById('timeline'),
+    dayFilterBar: document.getElementById('dayFilterBar'),
+    hideMtgBtn: document.getElementById('hideMtgBtn'),
+    toTopBtn: document.getElementById('toTopBtn'),
     emptyMsg: document.getElementById('emptyMsg'),
     dateNav: document.getElementById('dateNav'),
     modeDayBtn: document.getElementById('modeDayBtn'),
@@ -1049,6 +1069,8 @@
 
     initFontSize();
     initTranscribeMode();
+    initHideMtg();
+    initToTop();
     initTimeMode();
     initImages();
     updateDateUI();
@@ -1827,6 +1849,38 @@
     return list;
   }
 
+  // ---------- 朝MTGを隠す（日ごとの一覧のみ。端末に記憶） ----------
+
+  var MTG_TAG = '朝MTG';
+  var HIDE_MTG_KEY = 'srn.hideMtg';
+  var hideMtg = false;
+  function isMtgRecord(r) { return (r.tags || []).indexOf(MTG_TAG) !== -1; }
+  function updateHideMtgButton(count) {
+    // 朝MTGの記録がない日は、隠していないかぎりボタンを出さない
+    el.dayFilterBar.hidden = viewMode !== 'day' || (!hideMtg && count === 0);
+    el.hideMtgBtn.setAttribute('aria-pressed', hideMtg ? 'true' : 'false');
+    el.hideMtgBtn.textContent = hideMtg
+      ? '朝MTGを隠しています（' + count + '件）・表示する'
+      : '朝MTGを隠す（' + count + '件）';
+  }
+  function initHideMtg() {
+    try { hideMtg = localStorage.getItem(HIDE_MTG_KEY) === '1'; } catch (e) { /* 記憶できなくても動作に影響なし */ }
+    el.hideMtgBtn.addEventListener('click', function () {
+      hideMtg = !hideMtg;
+      try { localStorage.setItem(HIDE_MTG_KEY, hideMtg ? '1' : '0'); } catch (e) { /* 同上 */ }
+      render();
+    });
+  }
+
+  // ---------- 右下の「上へ」 ----------
+
+  function initToTop() {
+    var update = function () { el.toTopBtn.classList.toggle('show', window.scrollY > 400); };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+    el.toTopBtn.addEventListener('click', jumpToInput);
+  }
+
   function render() {
     setSyncStatus();
     if (!me) return;
@@ -1834,6 +1888,10 @@
     // 編集フォームを開いている間は画面を作り直さない（作り直すと入力中の文字が消え、キーボードも閉じてしまう）
     if (editingId) return;
     var records = computeView();
+    // 「朝MTG」を隠しているときは一覧から外す（隠した件数はボタンに出す）
+    var mtgCount = records.filter(isMtgRecord).length;
+    if (hideMtg) records = records.filter(function (r) { return !isMtgRecord(r); });
+    updateHideMtgButton(mtgCount);
 
     el.timeline.hidden = false;
     el.emptyMsg.hidden = records.length !== 0;
@@ -2022,6 +2080,7 @@
       el.loadingMsg.hidden = true;
       el.timeline.hidden = true;
       el.emptyMsg.hidden = true;
+      el.dayFilterBar.hidden = true;
     }
     window.scrollTo(0, 0);
   }
