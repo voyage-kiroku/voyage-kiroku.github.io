@@ -258,6 +258,13 @@
     .layout-main .timeline { margin-top: 16px; }
   }
 
+  /* 転記モード：入力欄を隠し、記録だけを幅400px程度で表示する（福祉見聞録の画面と並べて転記するとき用。端末に記憶） */
+  #transcribeBtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  body.transcribe-mode .shell { max-width: 420px; }
+  body.transcribe-mode #composeCard, body.transcribe-mode .jump-btn { display: none !important; }
+  body.transcribe-mode .layout { display: block; }
+  body.transcribe-mode .layout-side { position: static; max-height: none; overflow: visible; padding-bottom: 0; }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -337,6 +344,9 @@
     <div class="mode-tabs" role="group" aria-label="表示の切り替え">
       <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true">日ごと</button>
       <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false">絞り込み・印刷</button>
+    </div>
+    <div class="mode-tabs" role="group" aria-label="転記モード">
+      <button type="button" class="mode-btn" id="transcribeBtn" aria-pressed="false" title="入力欄を隠し、記録だけを細く表示します（福祉見聞録と並べて転記するとき用）">転記モード</button>
     </div>
     <div class="size-row" role="group" aria-label="文字サイズ">
       <span>文字サイズ</span>
@@ -510,6 +520,7 @@
     modeDayBtn: document.getElementById('modeDayBtn'),
     modeFilterBtn: document.getElementById('modeFilterBtn'),
     jumpBtn: document.getElementById('jumpBtn'),
+    transcribeBtn: document.getElementById('transcribeBtn'),
     filterCard: document.getElementById('filterCard'),
     fFrom: document.getElementById('fFrom'),
     fTo: document.getElementById('fTo'),
@@ -570,6 +581,26 @@
         try { localStorage.setItem(SIZE_STORE_KEY, k); } catch (e) { /* 同上 */ }
         refreshClamp(document); // 文字の大きさで行数が変わるため、折りたたみを判定し直す
       });
+    });
+  }
+
+  // ---------- 転記モード（入力欄を隠して記録だけを細く表示。この端末にだけ記憶する） ----------
+
+  var TRANSCRIBE_KEY = 'srn.transcribe';
+  function applyTranscribeMode(on) {
+    document.body.classList.toggle('transcribe-mode', on);
+    el.transcribeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (typeof updateTopbarHeight === 'function') updateTopbarHeight();
+    refreshClamp(document); // 幅が変わって行数が変わるため、折りたたみを判定し直す
+  }
+  function initTranscribeMode() {
+    var on = false;
+    try { on = localStorage.getItem(TRANSCRIBE_KEY) === '1'; } catch (e) { /* 記憶できなくても動作に影響なし */ }
+    applyTranscribeMode(on);
+    el.transcribeBtn.addEventListener('click', function () {
+      var next = !document.body.classList.contains('transcribe-mode');
+      applyTranscribeMode(next);
+      try { localStorage.setItem(TRANSCRIBE_KEY, next ? '1' : '0'); } catch (e) { /* 同上 */ }
     });
   }
 
@@ -958,6 +989,7 @@
     }
 
     initFontSize();
+    initTranscribeMode();
     initTimeMode();
     initImages();
     updateDateUI();
