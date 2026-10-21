@@ -87,6 +87,11 @@
   textarea { resize: vertical; min-height: 4rem; line-height: 1.55; margin-bottom: 10px; font-family: inherit; }
   #contentInput { min-height: 9.4rem; }
   .edit-content { min-height: 11.9rem; }
+  /* 編集の「日付」欄（日付を変えると、その日の記録へ移る） */
+  .edit-date-row { margin-bottom: 8px; }
+  input.edit-date { display: block; width: 100%; max-width: 100%; min-width: 0; height: 2.75rem; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; -webkit-appearance: none; appearance: none; }
+  input.edit-date.moved { border-color: var(--pending); background: var(--pending-soft); }
+  .edit-date-note { font-size: .7rem; color: var(--pending); margin: 4px 0 0; }
   .compose-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
   button { font: inherit; cursor: pointer; border: none; }
   .btn-primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 10px 20px; border-radius: 999px; box-shadow: var(--shadow); }
@@ -1298,14 +1303,17 @@
 
   /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
   /** newImages を渡したときだけ画像も差し替える（Googleログイン版では渡さないので、画像はそのまま） */
-  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags) {
+  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags, newDateKey) {
     var payload = {
       id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
       base: { time: item.time, target: item.target, content: item.content, tags: item.tags || [] }
     };
     if (newImages) payload.images = newImages;
     if (newTags) payload.tags = newTags;
+    var moving = newDateKey && newDateKey !== item.dateKey;
+    if (moving) payload.newDateKey = newDateKey;
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
+      if (moving) addOp.dateKey = newDateKey; // まだ送っていない記録は、送り先の日付を変えるだけ
       addOp.payload.time = newTime;
       addOp.payload.target = newTarget;
       addOp.payload.content = newContent;
@@ -1655,6 +1663,9 @@
     promise.then(function (res) {
       queue.shift();
       if (op.type === 'add' && res && res.id) rememberRealId(op.tempId, res.id);
+      if (op.type === 'update' && op.payload && op.payload.newDateKey && op.payload.newDateKey !== viewDateKey) {
+        baseRecords = baseRecords.filter(function (r) { return r.id !== op.id; });
+      }
       if (op.payload) forgetLocalImages(op.payload.images); // 送り終えた画像は端末から消す
       flushing = false;
       persistStore();
@@ -1798,6 +1809,8 @@
           target: op.payload.target, content: op.payload.content,
           transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [], canEdit: true, _pending: true
         };
+      } else if (op.type === 'update' && map[op.id] && op.payload.newDateKey && op.payload.newDateKey !== viewDateKey) {
+        delete map[op.id];
       } else if (op.type === 'update' && map[op.id]) {
         map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
         if (op.payload.images) map[op.id].images = op.payload.images;
@@ -1925,6 +1938,7 @@
       item.content = values.content;
       if (values.images) item.images = values.images;
       if (values.tags) item.tags = values.tags;
+      if (values.dateKey) item.dateKey = values.dateKey;
       lastSearch.records.sort(function (a, b) {
         if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
         return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
@@ -2255,6 +2269,9 @@
           '<div><label class="hint">対象者</label><select class="edit-target"></select></div>' +
           '<div><label class="hint">時刻</label><input type="time" class="edit-time" value="' + escapeHtml(item.time) + '"></div>' +
         '</div>' +
+        '<div class="edit-date-row"><label class="hint">日付</label>' +
+          '<input type="date" class="edit-date" value="' + escapeHtml(item.dateKey || viewDateKey) + '" max="' + localDateKey() + '">' +
+          '<p class="edit-date-note" hidden></p></div>' +
         '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
         '<div class="tag-row edit-tags"></div>' +
         (ENABLE_IMAGES
@@ -2274,6 +2291,15 @@
     applyTimeMode(card.querySelector('.edit-time'));
     var editTags = (item.tags || []).slice();
     renderTagButtons(card.querySelector('.edit-tags'), editTags);
+    var dateEl = card.querySelector('.edit-date');
+    var dateNote = card.querySelector('.edit-date-note');
+    var originalDate = item.dateKey || viewDateKey;
+    dateEl.addEventListener('change', function () {
+      var moved = dateEl.value && dateEl.value !== originalDate;
+      dateEl.classList.toggle('moved', !!moved);
+      dateNote.hidden = !moved;
+      dateNote.textContent = moved ? '保存すると、この記録を ' + dateKeyLabel(dateEl.value) + ' に移します。' : '';
+    });
 
     var editImages = null;
     var addedInEdit = []; // この編集で新しく選んだ画像（キャンセルしたら端末から消す）
@@ -2306,11 +2332,18 @@
         timeEl.focus();
         return;
       }
-      var values = { time: time, target: card.querySelector('.edit-target').value, content: content };
+      var newDate = dateEl.value || originalDate;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || newDate > localDateKey()) {
+        dateEl.classList.add('invalid');
+        showError('日付は今日までの日を選んでください。');
+        return;
+      }
+      var values = { time: time, target: card.querySelector('.edit-target').value, content: content, dateKey: newDate };
       editingId = null;
       if (editImages) values.images = editImages;
       values.tags = sortTags(editTags);
-      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags, newDate); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      if (newDate !== originalDate) showToast(dateKeyLabel(newDate) + ' に移しました');
       if (onClose) onClose(true, item, values);
     });
   }
