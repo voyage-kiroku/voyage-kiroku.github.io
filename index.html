@@ -287,6 +287,24 @@
   body.transcribe-mode .to-top.show { display: block; }
   @media print { .to-top, .day-filter { display: none !important; } }
 
+  /* 未確認の申し送り（「翌日申し送り」タグ。今日の画面の一番上に出す） */
+  .handover-card { margin: 16px 18px 0; background: var(--danger-soft); border: 2px solid var(--danger); border-radius: 16px; padding: 12px 14px 14px; }
+  .handover-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .handover-head h2 { margin: 0; font-size: .95rem; color: var(--danger); }
+  .handover-empty { margin: 8px 0 0; font-size: .82rem; color: var(--muted); }
+  .handover-list { list-style: none; margin: 0; padding: 0; }
+  .handover-item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+  .handover-item.done { opacity: .62; }
+  .handover-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted); }
+  .handover-meta strong { color: var(--ink); }
+  .handover-content { font-size: .92rem; line-height: 1.65; white-space: pre-wrap; word-break: break-word; margin: 6px 0 8px; }
+  .handover-content:empty { display: none; }
+  .handover-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .handover-check { display: flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 700; color: var(--danger); cursor: pointer; }
+  .handover-check input { width: 18px; height: 18px; accent-color: var(--danger); }
+  .handover-done-note { font-size: .72rem; color: var(--muted); }
+  body.transcribe-mode .handover-card { display: none !important; }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -387,6 +405,15 @@
       <button type="button" class="op-btn" id="conflictCloseBtn">閉じる</button>
     </div>
   </div>
+
+  <section class="handover-card" id="handoverCard" aria-labelledby="handoverTitle" hidden>
+    <div class="handover-head">
+      <h2 id="handoverTitle">未確認の申し送り</h2>
+      <button type="button" class="mini-toggle" id="handoverShowDone" aria-pressed="false">済んだものも表示</button>
+    </div>
+    <p class="handover-empty" id="handoverEmpty" hidden>未確認の申し送りはありません。</p>
+    <ul class="handover-list" id="handoverList"></ul>
+  </section>
 
   <div class="layout">
   <div class="layout-side">
@@ -542,6 +569,11 @@
     submitBtn: document.getElementById('submitBtn'),
     loadingMsg: document.getElementById('loadingMsg'),
     timeline: document.getElementById('timeline'),
+    handoverCard: document.getElementById('handoverCard'),
+    handoverTitle: document.getElementById('handoverTitle'),
+    handoverShowDone: document.getElementById('handoverShowDone'),
+    handoverEmpty: document.getElementById('handoverEmpty'),
+    handoverList: document.getElementById('handoverList'),
     dayFilterBar: document.getElementById('dayFilterBar'),
     hideMtgBtn: document.getElementById('hideMtgBtn'),
     toTopBtn: document.getElementById('toTopBtn'),
@@ -909,7 +941,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -1070,6 +1102,7 @@
     initFontSize();
     initTranscribeMode();
     initHideMtg();
+    initHandovers();
     initToTop();
     initTimeMode();
     initImages();
@@ -1108,7 +1141,7 @@
 
     window.addEventListener('online', function () { flushQueue(); });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') { rollOverDayIfNeeded(); flushQueue(); }
+      if (document.visibilityState === 'visible') { rollOverDayIfNeeded(); flushQueue(); loadHandovers(); }
     });
 
     initAuth();
@@ -1175,6 +1208,7 @@
 
     render();
     flushQueue();
+    loadHandovers();
 
     if (!el.submitBtn.dataset.bound) {
       el.submitBtn.dataset.bound = '1';
@@ -1201,6 +1235,7 @@
     el.composeTitle.textContent = isToday ? '新しい記録' : '新しい記録（' + dateKeyLabel(viewDateKey) + ' に追加）';
     el.composeTitle.className = isToday ? '' : 'is-past';
     el.emptyMsg.textContent = isToday ? 'まだ記録がありません。今日最初の記録を書いてみましょう。' : 'この日の記録はありません。';
+    renderHandovers();
   }
 
   /** 表示する日付を切り替える（今日より先は選べない）。過去の日も、現在の日と同じように参照・編集・追記できる */
@@ -1678,6 +1713,8 @@
       promise = callServer('deleteRecord', op.payload);
     } else if (op.type === 'toggle') {
       promise = callServer('toggleTranscribed', op.payload);
+    } else if (op.type === 'handover') {
+      promise = callServer('setHandoverDone', { id: op.payload.id, dateKey: op.payload.dateKey, value: op.payload.value });
     } else {
       queue.shift(); flushing = false; persistStore(); flushQueueSoon(); return;
     }
@@ -1870,6 +1907,94 @@
       try { localStorage.setItem(HIDE_MTG_KEY, hideMtg ? '1' : '0'); } catch (e) { /* 同上 */ }
       render();
     });
+  }
+
+  // ---------- 未確認の申し送り（「翌日申し送り」タグ。昨日から7日前まで） ----------
+
+  var handovers = [];          // 受付窓口から取った申し送り（申し送り済みも含む）
+  var handoverShowDone = false;
+  var handoverTimer = null;
+
+  function initHandovers() {
+    el.handoverShowDone.addEventListener('click', function () {
+      handoverShowDone = !handoverShowDone;
+      renderHandovers();
+    });
+    // 他の職員がチェックしたら消えるよう、ときどき取り直す
+    handoverTimer = setInterval(function () { if (navigator.onLine !== false) loadHandovers(); }, 5 * 60 * 1000);
+  }
+
+  function loadHandovers() {
+    if (!me) return;
+    callServer('getHandovers', undefined, 60000).then(function (res) {
+      handovers = (res && res.records) || [];
+      renderHandovers();
+    }).catch(function () { /* 取れなくても記録の入力には影響しない。次の機会に取り直す */ });
+  }
+
+  /** 送信待ちのチェックがあれば、その状態を優先して出す */
+  function handoverState(h) {
+    var state = h.handover || '';
+    queue.forEach(function (op) {
+      if (op.type === 'handover' && op.payload.id === h.id) state = op.payload.value ? op.payload.label : '';
+    });
+    return state;
+  }
+
+  function renderHandovers() {
+    var show = !!me && viewMode === 'day' && viewDateKey === localDateKey() && handovers.length > 0;
+    el.handoverCard.hidden = !show;
+    if (!show) return;
+    var undone = handovers.filter(function (h) { return !handoverState(h); });
+    el.handoverTitle.textContent = '未確認の申し送り（' + undone.length + '件）';
+    el.handoverShowDone.setAttribute('aria-pressed', handoverShowDone ? 'true' : 'false');
+    el.handoverShowDone.textContent = handoverShowDone ? '済んだものを隠す' : '済んだものも表示（' + (handovers.length - undone.length) + '件）';
+    var list = handoverShowDone ? handovers : undone;
+    el.handoverEmpty.hidden = undone.length > 0;
+    el.handoverList.innerHTML = '';
+    list.forEach(function (h) { el.handoverList.appendChild(buildHandoverItem(h)); });
+  }
+
+  function buildHandoverItem(h) {
+    var state = handoverState(h);
+    var li = document.createElement('li');
+    li.className = 'handover-item' + (state ? ' done' : '');
+    li.innerHTML =
+      '<div class="handover-meta">' +
+        '<strong>' + escapeHtml(shortDateLabel(h.dateKey)) + ' ' + escapeHtml(h.time) + '</strong>' +
+        '<span class="chip chip-target">' + escapeHtml(h.target) + '</span>' +
+        '<span>記録：' + escapeHtml(h.staffName) + '</span>' +
+      '</div>' +
+      '<div class="handover-content">' + escapeHtml(h.content) + '</div>' +
+      '<div class="entry-images" hidden></div>' +
+      '<div class="handover-foot">' +
+        '<label class="handover-check"><input type="checkbox"' + (state ? ' checked' : '') + '> 申し送り済み</label>' +
+        (state ? '<span class="handover-done-note">' + escapeHtml(state) + '</span>' : '') +
+      '</div>';
+    var imgs = h.images || [];
+    var box = li.querySelector('.entry-images');
+    if (imgs.length && ENABLE_IMAGES) {
+      box.hidden = false;
+      imgs.forEach(function (img) { box.appendChild(makeThumb(img)); });
+    } else if (imgs.length) {
+      box.outerHTML = '<p class="image-note">📷 画像' + imgs.length + '枚（アプリ版で見られます）</p>';
+    }
+    li.querySelector('.handover-check input').addEventListener('change', function (e) {
+      requestHandover(h, e.target.checked);
+    });
+    return li;
+  }
+
+  /** 申し送り済みの付け外し。電波がなくても送信待ちに積み、つながったら送る */
+  function requestHandover(h, value) {
+    var now = new Date();
+    var label = (me.staffName || '') + ' ' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + nowHHMM();
+    // 付けて外した、などの操作は順に送る（送信中の操作を消すと、送信待ちの並びが崩れるため消さない）
+    queue.push({ opId: uid(), type: 'handover', id: h.id, dateKey: h.dateKey, payload: { id: h.id, dateKey: h.dateKey, value: value, label: label } });
+    h.handover = value ? label : '';
+    persistStore();
+    renderHandovers();
+    flushQueue();
   }
 
   // ---------- 右下の「上へ」 ----------
@@ -2082,6 +2207,7 @@
       el.emptyMsg.hidden = true;
       el.dayFilterBar.hidden = true;
     }
+    renderHandovers();
     window.scrollTo(0, 0);
   }
 
