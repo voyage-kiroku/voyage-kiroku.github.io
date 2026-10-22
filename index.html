@@ -406,15 +406,6 @@
     </div>
   </div>
 
-  <section class="handover-card" id="handoverCard" aria-labelledby="handoverTitle" hidden>
-    <div class="handover-head">
-      <h2 id="handoverTitle">未確認の申し送り</h2>
-      <button type="button" class="mini-toggle" id="handoverShowDone" aria-pressed="false">済んだものも表示</button>
-    </div>
-    <p class="handover-empty" id="handoverEmpty" hidden>未確認の申し送りはありません。</p>
-    <ul class="handover-list" id="handoverList"></ul>
-  </section>
-
   <div class="layout">
   <div class="layout-side">
   <div class="compose" id="composeCard" hidden>
@@ -448,6 +439,14 @@
     </div>
   </div>
 
+  <section class="handover-card" id="handoverCard" aria-labelledby="handoverTitle" hidden>
+    <div class="handover-head">
+      <h2 id="handoverTitle">未確認の申し送り</h2>
+      <button type="button" class="mini-toggle" id="handoverShowDone" aria-pressed="false">済んだものも表示</button>
+    </div>
+    <p class="handover-empty" id="handoverEmpty" hidden>未確認の申し送りはありません。</p>
+    <ul class="handover-list" id="handoverList"></ul>
+  </section>
   <div class="compose filter-card" id="filterCard" hidden>
     <h2>絞り込み</h2>
     <div class="filter-grid">
@@ -1915,7 +1914,28 @@
   var handoverShowDone = false;
   var handoverTimer = null;
 
+  /**
+   * 申し送りの枠の置き場所：スマホでは入力欄のすぐ下。
+   * パソコン表示では左側の高さが限られ、入力欄の下だと隠れてしまうため、右側の一覧の一番上に置く。
+   */
+  var DESKTOP_MQ = window.matchMedia ? window.matchMedia('(min-width: 900px)') : null;
+  function placeHandoverCard() {
+    var desktop = DESKTOP_MQ && DESKTOP_MQ.matches;
+    var main = document.querySelector('.layout-main');
+    if (desktop && main && el.handoverCard.parentNode !== main) {
+      main.insertBefore(el.handoverCard, main.firstChild);
+    } else if (!desktop && el.handoverCard.previousElementSibling !== el.composeCard) {
+      el.composeCard.parentNode.insertBefore(el.handoverCard, el.composeCard.nextSibling);
+    }
+  }
+
   function initHandovers() {
+    placeHandoverCard();
+    if (DESKTOP_MQ) {
+      if (DESKTOP_MQ.addEventListener) DESKTOP_MQ.addEventListener('change', placeHandoverCard);
+      else if (DESKTOP_MQ.addListener) DESKTOP_MQ.addListener(placeHandoverCard);
+    }
+    window.addEventListener('resize', placeHandoverCard); // 幅の変化の知らせが来ない環境のための保険
     el.handoverShowDone.addEventListener('click', function () {
       handoverShowDone = !handoverShowDone;
       renderHandovers();
