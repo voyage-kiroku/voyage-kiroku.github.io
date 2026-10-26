@@ -51,6 +51,7 @@
   .date-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: none; padding: 0; }
   .date-pill { font-size: .85rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
   .tools-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 18px 0; }
+  .topbar .tools-row { margin: 10px 0 0; }
   .mode-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
   .mode-btn { font-size: .78rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 999px; padding: 6px 12px; }
   .mode-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
@@ -156,7 +157,8 @@
   .entry-content.clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
   .more-btn { display: block; background: none; color: var(--accent); font-size: .76rem; font-weight: 700; padding: 0; margin: -4px 0 10px; }
   /* 時刻：「今」ボタンと、入力方法（スクロール／直接入力）の切り替え */
-  .time-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; }
+  .time-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; height: 1.45rem; }
+  .field-row > div > label.hint:first-child { display: flex; align-items: center; height: 1.45rem; margin-bottom: 4px; }
   .time-head label.hint { margin-bottom: 0; }
   .mini-btn { font-size: .68rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 9px; }
   .link-btn { display: block; white-space: nowrap; background: none; color: var(--muted); font-size: .68rem; padding: 4px 0 0; text-decoration: underline; text-align: right; width: 100%; }
@@ -1138,8 +1140,8 @@
     el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
     el.modeFilterBtn.addEventListener('click', function () { setMode('filter'); });
     el.jumpBtn.addEventListener('click', jumpToInput);
-    updateTopbarHeight();
-    window.addEventListener('resize', updateTopbarHeight);
+    placeToolsRow();
+    window.addEventListener('resize', placeToolsRow);
     el.searchBtn.addEventListener('click', doSearch);
     el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
     el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
@@ -2396,6 +2398,19 @@
     try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
     document.body.removeChild(ta);
     return ok;
+  }
+
+  /**
+   * 「日ごと／絞り込み・印刷・転記モード・文字サイズ」の段の置き場所。
+   * パソコン表示では上の帯（スクロールしても残る）の中に入れ、スマホでは今までどおり帯の下に置く（帯が高くなりすぎないように）。
+   */
+  function placeToolsRow() {
+    var row = document.querySelector('.tools-row');
+    if (!row || !el.topbar) return;
+    var desktop = window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
+    if (desktop && row.parentNode !== el.topbar) el.topbar.appendChild(row);
+    else if (!desktop && row.parentNode === el.topbar) el.topbar.parentNode.insertBefore(row, el.topbar.nextSibling);
+    updateTopbarHeight();
   }
 
   /** パソコン表示で左側（入力欄）を上の帯のすぐ下に貼り付けるため、帯の高さを CSS に渡す */
