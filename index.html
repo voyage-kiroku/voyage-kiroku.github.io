@@ -295,15 +295,6 @@
   .handover-head h2 { margin: 0; font-size: .95rem; color: var(--danger); }
   .handover-empty { margin: 8px 0 0; font-size: .82rem; color: var(--muted); }
   .handover-list { list-style: none; margin: 0; padding: 0; }
-  .handover-item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
-  .handover-item.done { opacity: .62; }
-  .handover-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted); }
-  .handover-meta strong { color: var(--ink); }
-  .handover-content { font-size: .92rem; line-height: 1.65; white-space: pre-wrap; word-break: break-word; margin: 6px 0 8px; }
-  .handover-content:empty { display: none; }
-  .handover-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 8px; border-top: 1px dashed var(--line); }
-  .handover-check { display: flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 700; color: var(--danger); cursor: pointer; }
-  .handover-check input { width: 18px; height: 18px; accent-color: var(--danger); }
   .handover-done-note { font-size: .72rem; color: var(--muted); }
   body.transcribe-mode .handover-card { display: none !important; }
 
@@ -327,6 +318,14 @@
   .comment-form .op-btn { flex: none; }
   .comment-edit { margin-top: 4px; }
   .comment-edit .edit-actions { margin-top: 6px; }
+
+  /* 「翌日申し送り」の記録カードに付く「申し送り済み」チェック（どの画面でも同じ） */
+  .handover-label { color: var(--danger); }
+  .handover-label input { accent-color: var(--danger); }
+  .handover-label.done { font-weight: 700; }
+  .entry.handover-done .entry-card { opacity: .62; }
+  .handover-list.timeline { margin: 6px 0 0; }
+  .entry-time .md { display: block; font-size: .72rem; font-weight: 700; }
 
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
@@ -468,7 +467,7 @@
       <button type="button" class="mini-toggle" id="handoverShowDone" aria-pressed="false">済んだものも表示</button>
     </div>
     <p class="handover-empty" id="handoverEmpty" hidden>未確認の申し送りはありません。</p>
-    <ul class="handover-list" id="handoverList"></ul>
+    <ul class="timeline handover-list" id="handoverList"></ul>
   </section>
   <div class="compose filter-card" id="filterCard" hidden>
     <h2>絞り込み</h2>
@@ -2008,39 +2007,8 @@
     var list = handoverShowDone ? handovers : undone;
     el.handoverEmpty.hidden = undone.length > 0;
     el.handoverList.innerHTML = '';
-    list.forEach(function (h) { el.handoverList.appendChild(buildHandoverItem(h)); });
-  }
-
-  function buildHandoverItem(h) {
-    var state = handoverState(h);
-    var li = document.createElement('li');
-    li.className = 'handover-item' + (state ? ' done' : '');
-    li.innerHTML =
-      '<div class="handover-meta">' +
-        '<strong>' + escapeHtml(shortDateLabel(h.dateKey)) + ' ' + escapeHtml(h.time) + '</strong>' +
-        '<span class="chip chip-target">' + escapeHtml(h.target) + '</span>' +
-        '<span>記録：' + escapeHtml(h.staffName) + '</span>' +
-      '</div>' +
-      '<div class="handover-content">' + escapeHtml(h.content) + '</div>' +
-      '<div class="entry-images" hidden></div>' +
-      '<div class="handover-foot">' +
-        '<label class="handover-check"><input type="checkbox"' + (state ? ' checked' : '') + '> 申し送り済み</label>' +
-        (state ? '<span class="handover-done-note">' + escapeHtml(state) + '</span>' : '') +
-      '</div>';
-    var imgs = h.images || [];
-    var box = li.querySelector('.entry-images');
-    if (imgs.length && ENABLE_IMAGES) {
-      box.hidden = false;
-      imgs.forEach(function (img) { box.appendChild(makeThumb(img)); });
-    } else if (imgs.length) {
-      box.outerHTML = '<p class="image-note">📷 画像' + imgs.length + '枚（アプリ版で見られます）</p>';
-    }
-    var hfoot = li.querySelector('.handover-foot');
-    hfoot.parentNode.insertBefore(buildComments(h), hfoot);
-    li.querySelector('.handover-check input').addEventListener('change', function (e) {
-      requestHandover(h, e.target.checked);
-    });
-    return li;
+    list.forEach(function (h) { el.handoverList.appendChild(buildEntry(h, 'handover')); });
+    refreshClamp(el.handoverList);
   }
 
   /** 申し送り済みの付け外し。電波がなくても送信待ちに積み、つながったら送る */
@@ -2049,9 +2017,15 @@
     var label = (me.staffName || '') + ' ' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + nowHHMM();
     // 付けて外した、などの操作は順に送る（送信中の操作を消すと、送信待ちの並びが崩れるため消さない）
     queue.push({ opId: uid(), type: 'handover', id: h.id, dateKey: h.dateKey, payload: { id: h.id, dateKey: h.dateKey, value: value, label: label } });
-    h.handover = value ? label : '';
+    var text = value ? label : '';
+    h.handover = text;
+    [baseRecords, lastSearch ? lastSearch.records : [], handovers].forEach(function (records) {
+      records.forEach(function (r) { if (r.id === h.id) r.handover = text; });
+    });
     persistStore();
     renderHandovers();
+    render();
+    if (viewMode === 'filter' && lastSearch) renderResults();
     flushQueue();
   }
 
@@ -2261,15 +2235,28 @@
    * 記録1件の表示を作る。inResults=true は絞り込み結果用。
    * どちらの画面でも「コピー」（内容だけ）・「転記済み」のチェック・本人の記録の編集と削除ができる。
    */
+  /** 申し送りの対象か（「翌日申し送り」タグが付いた、昨日以前の記録） */
+  function isHandoverRecord(r) {
+    return (r.tags || []).indexOf(PINNED_TAG) !== -1 && !!r.dateKey && r.dateKey < localDateKey();
+  }
+
+  /**
+   * 記録カードを作る。inResults: false＝日ごとの一覧、true＝絞り込み結果、'handover'＝未確認の申し送りの枠。
+   */
   function buildEntry(item, inResults) {
+    var inHandover = inResults === 'handover';
+    var handoverOn = isHandoverRecord(item);
+    var handoverDone = handoverOn ? handoverState(item) : '';
     var li = document.createElement('li');
-    li.className = 'entry' + (item._pending ? ' is-pending' : '');
+    li.className = 'entry' + (item._pending ? ' is-pending' : '') + (handoverDone ? ' handover-done' : '');
     var ops = '<button class="op-btn copy-btn">コピー</button>';
     ops += item.canEdit
       ? '<button class="op-btn edit-btn">編集</button><button class="op-btn danger del-btn">削除</button>'
       : '<span class="locked-note">本人のみ編集可</span>';
     li.innerHTML =
-      '<div class="entry-time">' + escapeHtml(item.time) + '</div>' +
+      '<div class="entry-time">' +
+        (inHandover ? '<span class="md">' + escapeHtml(monthDayLabel(item.dateKey)) + '</span>' : '') +
+        escapeHtml(item.time) + '</div>' +
       '<div class="entry-card">' +
         '<div class="entry-meta">' +
           '<span class="chip chip-target">' + escapeHtml(item.target) + '</span>' +
@@ -2289,6 +2276,12 @@
             '<label class="transcribe-label' + (item.transcribed ? ' done' : '') + '">' +
               '<input type="checkbox" class="transcribe-check"' + (item.transcribed ? ' checked' : '') + '> 福祉見聞録へ転記済み' +
             '</label>' +
+            (handoverOn
+              ? '<label class="transcribe-label handover-label' + (handoverDone ? ' done' : '') + '">' +
+                  '<input type="checkbox" class="handover-check-input"' + (handoverDone ? ' checked' : '') + '> 申し送り済み' +
+                '</label>' +
+                (handoverDone ? '<span class="handover-done-note">' + escapeHtml(handoverDone) + '</span>' : '')
+              : '') +
             '<div class="entry-ops">' + ops + '</div>' +
           '</div>' +
         '</div>' +
@@ -2321,6 +2314,12 @@
       imgBox.parentNode.insertBefore(note, imgBox);
     }
 
+    if (handoverOn) {
+      card.querySelector('.handover-check-input').addEventListener('change', function (e) {
+        requestHandover(item, e.target.checked);
+      });
+    }
+
     card.querySelector('.copy-btn').addEventListener('click', function () { copyText(String(item.content || '')); });
     card.querySelector('.more-btn').addEventListener('click', function () {
       expandedIds[item.id] = !expandedIds[item.id];
@@ -2329,12 +2328,15 @@
 
     if (item.canEdit) {
       card.querySelector('.edit-btn').addEventListener('click', function () {
-        enterEditMode(card, item, inResults ? afterResultEdit : null);
+        enterEditMode(card, item, inHandover ? afterHandoverEdit : inResults ? afterResultEdit : null);
       });
       card.querySelector('.del-btn').addEventListener('click', function () {
         if (!confirm('この記録を削除します。よろしいですか？')) return;
         requestDelete(item);
-        if (inResults && lastSearch) {
+        if (inHandover) {
+          handovers = handovers.filter(function (r) { return r.id !== item.id; });
+          renderHandovers();
+        } else if (inResults && lastSearch) {
           // 絞り込み結果からも取り除く（印刷にも反映される）
           lastSearch.records = lastSearch.records.filter(function (r) { return r !== item; });
           renderResults();
@@ -2342,6 +2344,24 @@
       });
     }
     return li;
+  }
+
+  /** 申し送りの枠で編集を保存／キャンセルしたあと、枠を描き直す */
+  function afterHandoverEdit(saved, item, values) {
+    if (saved) {
+      item.time = values.time;
+      item.target = values.target;
+      item.content = values.content;
+      if (values.images) item.images = values.images;
+      if (values.tags) item.tags = values.tags;
+      if (values.dateKey) item.dateKey = values.dateKey;
+    }
+    renderHandovers();
+  }
+
+  function monthDayLabel(key) {
+    var p = String(key || '').split('-');
+    return p.length === 3 ? Number(p[1]) + '/' + Number(p[2]) : '';
   }
 
   /** 絞り込み結果で編集を保存／キャンセルしたあと、結果の一覧を描き直す */
@@ -2560,17 +2580,21 @@
     el.resultPager.hidden = names.length === 0;
     if (!names.length) { pagerTarget = ''; return; }
     if (pagerTarget && names.indexOf(pagerTarget) === -1) pagerTarget = '';
-    var count = {};
-    lastSearch.records.forEach(function (r) { var t = String(r.target || ''); count[t] = (count[t] || 0) + 1; });
+    var count = {}, open = {}, openAll = 0;
+    lastSearch.records.forEach(function (r) {
+      var t = String(r.target || '');
+      count[t] = (count[t] || 0) + 1;
+      if (isHandoverRecord(r) && !handoverState(r)) { open[t] = (open[t] || 0) + 1; openAll++; }
+    });
     el.pagerSelect.innerHTML = '';
     var all = document.createElement('option');
     all.value = '';
-    all.textContent = 'すべての利用者（' + lastSearch.records.length + '件）';
+    all.textContent = 'すべての利用者（' + lastSearch.records.length + '件' + (openAll ? '・未申し送り' + openAll : '') + '）';
     el.pagerSelect.appendChild(all);
     names.forEach(function (t) {
       var o = document.createElement('option');
       o.value = t;
-      o.textContent = (t || '（対象者なし）') + '（' + (count[t] || 0) + '件）';
+      o.textContent = (t || '（対象者なし）') + '（' + (count[t] || 0) + '件' + (open[t] ? '・未申し送り' + open[t] : '') + '）';
       el.pagerSelect.appendChild(o);
     });
     el.pagerSelect.value = pagerTarget;
