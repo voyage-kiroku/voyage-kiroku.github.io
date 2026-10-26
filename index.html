@@ -305,6 +305,23 @@
   .handover-done-note { font-size: .72rem; color: var(--muted); }
   body.transcribe-mode .handover-card { display: none !important; }
 
+  /* コメント（記録ごと。誰でも書けて、直せるのは本人だけ） */
+  .comments { margin: -2px 0 10px; }
+  .comment-toggle { font-size: .76rem; font-weight: 700; color: var(--accent); background: none; padding: 2px 0; }
+  .comment-toggle.has { color: var(--accent); }
+  .comment-panel { margin-top: 6px; border-left: 3px solid var(--line); padding-left: 10px; }
+  .comment-list { list-style: none; margin: 0; padding: 0; }
+  .comment-item { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .comment-item.pending { opacity: .7; }
+  .comment-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .7rem; color: var(--muted); }
+  .comment-body { font-size: .86rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin-top: 3px; }
+  .link-mini { background: none; color: var(--muted); font-size: .7rem; text-decoration: underline; padding: 0 2px; }
+  .comment-form { display: flex; gap: 6px; align-items: flex-end; margin-top: 8px; }
+  .comment-form textarea, .comment-edit textarea { min-height: 2.7rem; margin: 0; font-size: .86rem; }
+  .comment-form .op-btn { flex: none; }
+  .comment-edit { margin-top: 4px; }
+  .comment-edit .edit-actions { margin-top: 6px; }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -893,6 +910,7 @@
     queue.forEach(function (q) {
       if (q.id === tempId) q.id = realId;
       if (q.payload && q.payload.id === tempId) q.payload.id = realId;
+      if (q.payload && q.payload.recordId === tempId) q.payload.recordId = realId;
     });
   }
 
@@ -940,7 +958,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -1384,7 +1402,7 @@
       // まだ送信していない自分の追加は、その追加ごと取り消す（この記録に対する後続の操作も不要になる）
       var tempId = queue[addIdx].tempId;
       forgetLocalImages(queue[addIdx].payload.images);
-      queue = queue.filter(function (q) { return q.tempId !== tempId && q.id !== tempId; });
+      queue = queue.filter(function (q) { return q.tempId !== tempId && q.id !== tempId && !(q.payload && q.payload.recordId === tempId); });
       persistStore();
       render();
       return;
@@ -1714,6 +1732,13 @@
       promise = callServer('toggleTranscribed', op.payload);
     } else if (op.type === 'handover') {
       promise = callServer('setHandoverDone', { id: op.payload.id, dateKey: op.payload.dateKey, value: op.payload.value });
+    } else if (op.type === 'comment-add') {
+      if (!op.sent) { op.sent = true; persistStore(); }
+      promise = callServer('addComment', { clientOpId: op.opId, recordId: resolveId(op.payload.recordId), dateKey: op.dateKey, body: op.payload.body });
+    } else if (op.type === 'comment-update') {
+      promise = callServer('updateComment', { id: resolveId(op.payload.id), dateKey: op.dateKey, body: op.payload.body });
+    } else if (op.type === 'comment-delete') {
+      promise = callServer('deleteComment', { id: resolveId(op.payload.id), dateKey: op.dateKey });
     } else {
       queue.shift(); flushing = false; persistStore(); flushQueueSoon(); return;
     }
@@ -1721,6 +1746,8 @@
     promise.then(function (res) {
       queue.shift();
       if (op.type === 'add' && res && res.id) rememberRealId(op.tempId, res.id);
+      if (op.type === 'comment-add' && res && res.id) rememberRealId(op.tempId, res.id);
+      if (/^comment-/.test(op.type)) { applyCommentResult(op, res); renderHandovers(); if (viewMode === 'filter' && lastSearch) renderResults(); }
       if (op.type === 'update' && op.payload && op.payload.newDateKey && op.payload.newDateKey !== viewDateKey) {
         baseRecords = baseRecords.filter(function (r) { return r.id !== op.id; });
       }
@@ -1754,6 +1781,8 @@
       msg.indexOf('削除できません') !== -1 ||
       msg.indexOf('登録されていません') !== -1 ||
       msg.indexOf('内容を入力してください') !== -1 ||
+      msg.indexOf('コメントを入力してください') !== -1 ||
+      msg.indexOf('コメントは') === 0 ||
       msg.indexOf('見つかりませんでした') !== -1 ||
       isConflictError_(err);
   }
@@ -1962,6 +1991,7 @@
   }
 
   function renderHandovers() {
+    if (commentTyping && !el.handoverCard.hidden) return;
     var show = !!me && viewMode === 'day' && viewDateKey === localDateKey() && handovers.length > 0;
     el.handoverCard.hidden = !show;
     if (!show) return;
@@ -1999,6 +2029,8 @@
     } else if (imgs.length) {
       box.outerHTML = '<p class="image-note">📷 画像' + imgs.length + '枚（アプリ版で見られます）</p>';
     }
+    var hfoot = li.querySelector('.handover-foot');
+    hfoot.parentNode.insertBefore(buildComments(h), hfoot);
     li.querySelector('.handover-check input').addEventListener('change', function (e) {
       requestHandover(h, e.target.checked);
     });
@@ -2017,6 +2049,172 @@
     flushQueue();
   }
 
+  // ---------- コメント ----------
+
+  var openComments = {};   // コメント欄を開いている記録（描き直しても開いたままにする）
+  var commentDrafts = {};  // 書きかけのコメント（記録ID → 文字）
+  var commentTyping = false; // コメントを入力中は、自動更新で画面を作り直さない
+
+  /** サーバーのコメントに、送信待ちの操作（追加・編集・削除）を重ねたもの */
+  function commentsOf(item) {
+    var list = (item.comments || []).map(function (c) { return Object.assign({}, c); });
+    var rid = resolveId(item.id);
+    queue.forEach(function (op) {
+      if (!/^comment-/.test(op.type) || resolveId(op.payload.recordId) !== rid) return;
+      if (op.type === 'comment-add') {
+        list.push({ id: op.tempId, name: me ? me.staffName : '', color: me ? me.staffColor : '', body: op.payload.body, at: op.payload.at, mine: true, _pending: true });
+        return;
+      }
+      var cid = resolveId(op.payload.id);
+      var c = list.find(function (x) { return x.id === cid || x.id === op.payload.id; });
+      if (!c) return;
+      if (op.type === 'comment-update') { c.body = op.payload.body; c.edited = true; c._pending = true; }
+      else list.splice(list.indexOf(c), 1);
+    });
+    return list;
+  }
+
+  /** 送信が済んだコメントを、手元の記録（日ごと・絞り込み結果・申し送り）にも反映する */
+  function applyCommentResult(op, res) {
+    var rid = resolveId(op.payload.recordId);
+    var lists = [baseRecords, lastSearch ? lastSearch.records : [], handovers];
+    lists.forEach(function (records) {
+      records.forEach(function (r) {
+        if (resolveId(r.id) !== rid) return;
+        r.comments = (r.comments || []).slice();
+        if (op.type === 'comment-add' && res && res.comment) {
+          if (!r.comments.some(function (c) { return c.id === res.comment.id; })) r.comments.push(res.comment);
+        } else {
+          var cid = resolveId(op.payload.id);
+          var i = r.comments.findIndex(function (c) { return c.id === cid; });
+          if (i === -1) return;
+          if (op.type === 'comment-update' && res && res.comment) r.comments[i] = res.comment;
+          else if (op.type === 'comment-delete') r.comments.splice(i, 1);
+        }
+      });
+    });
+  }
+
+  /** コメントを変えたあと、表示中の画面を描き直す */
+  function refreshCommentViews() {
+    commentTyping = false;
+    persistStore();
+    render();
+    if (viewMode === 'filter' && lastSearch) renderResults();
+    renderHandovers();
+    flushQueue();
+  }
+
+  function requestCommentAdd(item, body) {
+    var now = new Date();
+    queue.push({
+      opId: uid(), type: 'comment-add', tempId: 'tmpc-' + uid(), dateKey: item.dateKey || viewDateKey,
+      payload: { recordId: item.id, body: body, at: (now.getMonth() + 1) + '/' + now.getDate() + ' ' + nowHHMM() }
+    });
+    refreshCommentViews();
+  }
+
+  function requestCommentUpdate(item, c, body) {
+    var addOp = queue.find(function (op) { return op.type === 'comment-add' && op.tempId === c.id && !op.sent; });
+    if (addOp) addOp.payload.body = body; // まだ送っていないコメントは、中身を書き換えるだけ
+    else queue.push({ opId: uid(), type: 'comment-update', dateKey: item.dateKey || viewDateKey, payload: { id: c.id, recordId: item.id, body: body } });
+    refreshCommentViews();
+  }
+
+  function requestCommentDelete(item, c) {
+    var addIdx = queue.findIndex(function (op) { return op.type === 'comment-add' && op.tempId === c.id && !op.sent; });
+    if (addIdx !== -1) {
+      queue.splice(addIdx, 1); // まだ送っていないコメントは、送らずに取り消す
+      queue = queue.filter(function (op) { return !(op.payload && op.payload.id === c.id); });
+    } else {
+      queue.push({ opId: uid(), type: 'comment-delete', dateKey: item.dateKey || viewDateKey, payload: { id: c.id, recordId: item.id } });
+    }
+    refreshCommentViews();
+  }
+
+  function watchTyping(textarea) {
+    textarea.addEventListener('focus', function () { commentTyping = true; });
+    textarea.addEventListener('blur', function () { setTimeout(function () { commentTyping = false; }, 300); });
+  }
+
+  /** 記録1件分のコメント欄（ボタン・一覧・入力欄）を作る */
+  function buildComments(item) {
+    var list = commentsOf(item);
+    var wrap = document.createElement('div');
+    wrap.className = 'comments';
+    var open = !!openComments[item.id];
+    wrap.innerHTML =
+      '<button type="button" class="comment-toggle" aria-expanded="' + open + '">💬 コメント' + (list.length ? '（' + list.length + '）' : '') + (open ? ' ▲' : '') + '</button>' +
+      '<div class="comment-panel"' + (open ? '' : ' hidden') + '>' +
+        '<ul class="comment-list"></ul>' +
+        '<div class="comment-form"><textarea class="comment-input" rows="2" placeholder="コメントを書く"></textarea>' +
+        '<button type="button" class="op-btn save comment-send">送信</button></div>' +
+      '</div>';
+    var ul = wrap.querySelector('.comment-list');
+    list.forEach(function (c) { ul.appendChild(buildCommentItem(item, c)); });
+
+    var toggle = wrap.querySelector('.comment-toggle');
+    var panel = wrap.querySelector('.comment-panel');
+    toggle.addEventListener('click', function () {
+      openComments[item.id] = !openComments[item.id];
+      panel.hidden = !openComments[item.id];
+      toggle.setAttribute('aria-expanded', String(!!openComments[item.id]));
+      toggle.textContent = '💬 コメント' + (list.length ? '（' + list.length + '）' : '') + (openComments[item.id] ? ' ▲' : '');
+    });
+
+    var input = wrap.querySelector('.comment-input');
+    input.value = commentDrafts[item.id] || '';
+    watchTyping(input);
+    input.addEventListener('input', function () { commentDrafts[item.id] = input.value; });
+    wrap.querySelector('.comment-send').addEventListener('click', function () {
+      var body = input.value.trim();
+      if (!body) { input.focus(); return; }
+      delete commentDrafts[item.id];
+      openComments[item.id] = true;
+      requestCommentAdd(item, body);
+    });
+    return wrap;
+  }
+
+  function buildCommentItem(item, c) {
+    var li = document.createElement('li');
+    li.className = 'comment-item' + (c._pending ? ' pending' : '');
+    var k = colorKey(c.color);
+    li.innerHTML =
+      '<div class="comment-meta">' +
+        '<span class="chip chip-staff"' + (k ? ' data-color="' + k + '"' : '') + '>' + escapeHtml(c.name) + '</span>' +
+        '<span>' + escapeHtml(c.at || '') + (c.edited ? '（編集済み）' : '') + (c._pending ? '（未送信）' : '') + '</span>' +
+        (c.mine ? '<button type="button" class="link-mini c-edit">編集</button><button type="button" class="link-mini c-del">削除</button>' : '') +
+      '</div>' +
+      '<div class="comment-body">' + escapeHtml(c.body) + '</div>';
+    if (c.mine) {
+      li.querySelector('.c-del').addEventListener('click', function () {
+        if (!confirm('このコメントを削除します。よろしいですか？')) return;
+        requestCommentDelete(item, c);
+      });
+      li.querySelector('.c-edit').addEventListener('click', function () {
+        var bodyEl = li.querySelector('.comment-body');
+        var box = document.createElement('div');
+        box.className = 'comment-edit';
+        box.innerHTML = '<textarea rows="2"></textarea><div class="edit-actions">' +
+          '<button type="button" class="op-btn c-cancel">キャンセル</button><button type="button" class="op-btn save c-save">保存</button></div>';
+        var ta = box.querySelector('textarea');
+        ta.value = c.body;
+        watchTyping(ta);
+        bodyEl.replaceWith(box);
+        ta.focus();
+        box.querySelector('.c-cancel').addEventListener('click', function () { refreshCommentViews(); });
+        box.querySelector('.c-save').addEventListener('click', function () {
+          var body = ta.value.trim();
+          if (!body) { ta.focus(); return; }
+          if (body === c.body) { refreshCommentViews(); return; }
+          requestCommentUpdate(item, c, body);
+        });
+      });
+    }
+    return li;
+  }
+
   // ---------- 右下の「上へ」 ----------
 
   function initToTop() {
@@ -2032,6 +2230,7 @@
     if (viewMode !== 'day') return; // 絞り込み画面を表示中は、日ごとの一覧を作り直さない
     // 編集フォームを開いている間は画面を作り直さない（作り直すと入力中の文字が消え、キーボードも閉じてしまう）
     if (editingId) return;
+    if (commentTyping) return; // コメントを入力中は作り直さない（入力中の文字とキーボードを守る）
     var records = computeView();
     // 「朝MTG」を隠しているときは一覧から外す（隠した件数はボタンに出す）
     var mtgCount = records.filter(isMtgRecord).length;
@@ -2086,6 +2285,8 @@
       '</div>';
 
     var card = li.querySelector('.entry-card');
+    var foot = card.querySelector('.entry-foot');
+    foot.parentNode.insertBefore(buildComments(item), foot);
     var cardColor = recordColorKey(item.tags);
     if (cardColor) card.setAttribute('data-color', cardColor);
 
@@ -2445,7 +2646,8 @@
         '<td>' + escapeHtml(r.time) + '</td>' +
         '<td>' + escapeHtml(r.target) + '</td>' +
         '<td>' + escapeHtml(r.staffName) + '</td>' +
-        '<td class="c">' + ((r.tags && r.tags.length) ? escapeHtml('【' + r.tags.join('／') + '】') + '<br>' : '') + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') + '</td>' +
+        '<td class="c">' + ((r.tags && r.tags.length) ? escapeHtml('【' + r.tags.join('／') + '】') + '<br>' : '') + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') +
+          commentsOf(r).map(function (c) { return '\n［コメント］' + escapeHtml(c.name) + '（' + escapeHtml(c.at || '') + '）：' + escapeHtml(c.body); }).join('') + '</td>' +
         '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
       '</tr>';
     }).join('');
