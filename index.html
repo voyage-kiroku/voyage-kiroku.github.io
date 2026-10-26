@@ -307,15 +307,19 @@
 
   /* コメント（記録ごと。誰でも書けて、直せるのは本人だけ） */
   .comments { margin: -2px 0 10px; }
-  .comment-toggle { font-size: .76rem; font-weight: 700; color: var(--accent); background: none; padding: 2px 0; }
-  .comment-toggle.has { color: var(--accent); }
+  /* 押せるボタンに見えるよう、枠と背景を付ける（開いているときは塗りつぶし） */
+  .comment-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: .8rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; box-shadow: var(--shadow); }
+  .comment-toggle:active { transform: translateY(1px); box-shadow: none; }
+  .comment-toggle[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
+  .comment-toggle .chev { font-size: .7rem; }
   .comment-panel { margin-top: 6px; border-left: 3px solid var(--line); padding-left: 10px; }
   .comment-list { list-style: none; margin: 0; padding: 0; }
   .comment-item { padding: 6px 0; border-bottom: 1px dashed var(--line); }
   .comment-item.pending { opacity: .7; }
   .comment-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .7rem; color: var(--muted); }
   .comment-body { font-size: .86rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin-top: 3px; }
-  .link-mini { background: none; color: var(--muted); font-size: .7rem; text-decoration: underline; padding: 0 2px; }
+  .link-mini { background: var(--surface); color: var(--muted); font-size: .7rem; font-weight: 700; border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; }
+  .link-mini.c-del:hover { color: var(--danger); border-color: var(--danger); }
   .comment-form { display: flex; gap: 6px; align-items: flex-end; margin-top: 8px; }
   .comment-form textarea, .comment-edit textarea { min-height: 2.7rem; margin: 0; font-size: .86rem; }
   .comment-form .op-btn { flex: none; }
@@ -2137,6 +2141,10 @@
     textarea.addEventListener('blur', function () { setTimeout(function () { commentTyping = false; }, 300); });
   }
 
+  function commentToggleLabel(count, open) {
+    return '💬 コメント' + (count ? '（' + count + '）' : 'を書く') + ' <span class="chev">' + (open ? '▲' : '▼') + '</span>';
+  }
+
   /** 記録1件分のコメント欄（ボタン・一覧・入力欄）を作る */
   function buildComments(item) {
     var list = commentsOf(item);
@@ -2144,7 +2152,7 @@
     wrap.className = 'comments';
     var open = !!openComments[item.id];
     wrap.innerHTML =
-      '<button type="button" class="comment-toggle" aria-expanded="' + open + '">💬 コメント' + (list.length ? '（' + list.length + '）' : '') + (open ? ' ▲' : '') + '</button>' +
+      '<button type="button" class="comment-toggle" aria-expanded="' + open + '">' + commentToggleLabel(list.length, open) + '</button>' +
       '<div class="comment-panel"' + (open ? '' : ' hidden') + '>' +
         '<ul class="comment-list"></ul>' +
         '<div class="comment-form"><textarea class="comment-input" rows="2" placeholder="コメントを書く"></textarea>' +
@@ -2159,7 +2167,7 @@
       openComments[item.id] = !openComments[item.id];
       panel.hidden = !openComments[item.id];
       toggle.setAttribute('aria-expanded', String(!!openComments[item.id]));
-      toggle.textContent = '💬 コメント' + (list.length ? '（' + list.length + '）' : '') + (openComments[item.id] ? ' ▲' : '');
+      toggle.innerHTML = commentToggleLabel(list.length, !!openComments[item.id]);
     });
 
     var input = wrap.querySelector('.comment-input');
