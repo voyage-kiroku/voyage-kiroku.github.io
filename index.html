@@ -327,6 +327,19 @@
   .handover-list.timeline { margin: 6px 0 0; }
   .entry-time .md { display: block; font-size: .72rem; font-weight: 700; }
 
+  /* 上の帯の「↻ 更新」：他の職員の記録・コメント・申し送りを、すぐ取り直す */
+  .status-right { display: flex; align-items: center; gap: 6px; }
+  .refresh-btn { display: inline-flex; align-items: center; gap: 3px; font-size: .74rem; font-weight: 700; color: var(--accent); background: var(--surface); border: 1px solid var(--accent); border-radius: 999px; padding: 4px 11px; }
+  .refresh-btn:active { transform: translateY(1px); }
+  .refresh-btn .ic { display: inline-block; font-size: .9rem; line-height: 1; }
+  .refresh-btn.spinning { opacity: .7; }
+  @media (prefers-reduced-motion: no-preference) {
+    .refresh-btn.spinning .ic { animation: srn-spin .9s linear infinite; }
+  }
+  @keyframes srn-spin { to { transform: rotate(360deg); } }
+  /* コメント：書く欄は「＋ コメントを書く」で開く */
+  .comment-write-btn { margin-top: 8px; font-size: .76rem; font-weight: 700; color: var(--accent); background: var(--surface); border: 1px dashed var(--accent); border-radius: 999px; padding: 5px 12px; }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -398,7 +411,10 @@
     </div>
     <div class="status-row">
       <div class="me-row"><span id="meRow">読み込み中…</span><button type="button" class="logout-btn" id="logoutBtn" hidden>ログアウト</button></div>
-      <span class="sync-pill synced" id="syncPill"><span class="sync-dot"></span><span id="syncPillText">同期済み</span></span>
+      <div class="status-right">
+        <button type="button" class="refresh-btn" id="refreshBtn" aria-label="最新の状態に更新"><span class="ic">↻</span> 更新</button>
+        <span class="sync-pill synced" id="syncPill"><span class="sync-dot"></span><span id="syncPillText">同期済み</span></span>
+      </div>
     </div>
   </div>
 
@@ -577,6 +593,7 @@
     regForm: document.getElementById('regForm'),
     authError: document.getElementById('authError'),
     syncPill: document.getElementById('syncPill'),
+    refreshBtn: document.getElementById('refreshBtn'),
     syncPillText: document.getElementById('syncPillText'),
     errorBanner: document.getElementById('errorBanner'),
     conflictBanner: document.getElementById('conflictBanner'),
@@ -1139,6 +1156,7 @@
     el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
     el.modeFilterBtn.addEventListener('click', function () { setMode('filter'); });
     el.jumpBtn.addEventListener('click', jumpToInput);
+    el.refreshBtn.addEventListener('click', manualRefresh);
     placeToolsRow();
     window.addEventListener('resize', placeToolsRow);
     el.searchBtn.addEventListener('click', doSearch);
@@ -1979,11 +1997,50 @@
   }
 
   function loadHandovers() {
-    if (!me) return;
-    callServer('getHandovers', undefined, 60000).then(function (res) {
+    if (!me) return Promise.resolve();
+    return callServer('getHandovers', undefined, 60000).then(function (res) {
       handovers = (res && res.records) || [];
       renderHandovers();
     }).catch(function () { /* 取れなくても記録の入力には影響しない。次の機会に取り直す */ });
+  }
+
+  /**
+   * 「↻ 更新」：送信待ちを送り、表示中の日の記録・申し送り・（絞り込み中なら）結果を取り直す。
+   * 絞り込みは同じ条件で取り直し、利用者ごとにめくっている位置もそのまま。
+   */
+  var refreshing = false;
+  function manualRefresh() {
+    if (!me || refreshing) return;
+    refreshing = true;
+    el.refreshBtn.classList.add('spinning');
+    flushQueue();
+    var key = viewDateKey;
+    var jobs = [
+      callServer('getRecords', key).then(function (records) {
+        if (viewDateKey !== key) return;
+        baseRecords = records;
+        persistStore();
+        render();
+      }),
+      loadHandovers()
+    ];
+    if (viewMode === 'filter' && lastSearch) {
+      var q = lastSearch.q;
+      jobs.push(callServer('searchRecords', q, SEARCH_TIMEOUT_MS).then(function (res) {
+        if (!lastSearch || lastSearch.q !== q) return;
+        lastSearch.records = (res && res.records) || [];
+        lastSearch.truncated = !!(res && res.truncated);
+        if (viewMode === 'filter') renderResults();
+      }));
+    }
+    Promise.all(jobs).then(function () {
+      showToast('最新の状態にしました');
+    }).catch(function () {
+      showToast('更新できませんでした（電波を確認してください）');
+    }).then(function () {
+      refreshing = false;
+      el.refreshBtn.classList.remove('spinning');
+    });
   }
 
   /** 送信待ちのチェックがあれば、その状態を優先して出す */
@@ -2031,7 +2088,25 @@
 
   // ---------- コメント ----------
 
-  var openComments = {};   // コメント欄を開いている記録（描き直しても開いたままにする）
+  var openComments = {};   // この画面で開け閉めした記録（記録ID → true/false。描き直しても保つ）
+  var composeOpen = {};    // 「＋ コメントを書く」を開いている記録
+  var CLOSED_COMMENTS_KEY = 'srn.closedComments';
+  // 「確認して閉じた」記録（記録ID → 閉じたときの件数）。新しいコメントが付けば、また開いて見せる
+  var closedComments = (function () {
+    try { return JSON.parse(localStorage.getItem(CLOSED_COMMENTS_KEY) || '{}') || {}; } catch (e) { return {}; }
+  })();
+  function saveClosedComments() {
+    var keys = Object.keys(closedComments);
+    if (keys.length > 500) keys.slice(0, keys.length - 500).forEach(function (k) { delete closedComments[k]; }); // 古いものから捨てる
+    try { localStorage.setItem(CLOSED_COMMENTS_KEY, JSON.stringify(closedComments)); } catch (e) { /* 覚えられなくても動く */ }
+  }
+  /** コメント欄を開いて見せるか：コメントがあれば最初から開く。確認して閉じたものは、新しいコメントが付くまで閉じたまま */
+  function isCommentsOpen(item, count) {
+    if (openComments[item.id] !== undefined) return openComments[item.id];
+    if (!count) return false;
+    var closedAt = closedComments[resolveId(item.id)];
+    return !(closedAt !== undefined && closedAt >= count);
+  }
   var commentDrafts = {};  // 書きかけのコメント（記録ID → 文字）
   var commentTyping = false; // コメントを入力中は、自動更新で画面を作り直さない
 
@@ -2126,12 +2201,15 @@
     var list = commentsOf(item);
     var wrap = document.createElement('div');
     wrap.className = 'comments';
-    var open = !!openComments[item.id];
+    var open = isCommentsOpen(item, list.length);
+    // 書く欄は、コメントがまだない記録・書きかけがある記録・「＋ コメントを書く」を押した記録だけ最初から出す
+    var formOpen = !list.length || !!composeOpen[item.id] || !!commentDrafts[item.id];
     wrap.innerHTML =
       '<button type="button" class="comment-toggle" aria-expanded="' + open + '">' + commentToggleLabel(list.length, open) + '</button>' +
       '<div class="comment-panel"' + (open ? '' : ' hidden') + '>' +
         '<ul class="comment-list"></ul>' +
-        '<div class="comment-form"><textarea class="comment-input" rows="2" placeholder="コメントを書く"></textarea>' +
+        '<button type="button" class="comment-write-btn"' + (formOpen ? ' hidden' : '') + '>＋ コメントを書く</button>' +
+        '<div class="comment-form"' + (formOpen ? '' : ' hidden') + '><textarea class="comment-input" rows="2" placeholder="コメントを書く"></textarea>' +
         '<button type="button" class="op-btn save comment-send">送信</button></div>' +
       '</div>';
     var ul = wrap.querySelector('.comment-list');
@@ -2140,10 +2218,25 @@
     var toggle = wrap.querySelector('.comment-toggle');
     var panel = wrap.querySelector('.comment-panel');
     toggle.addEventListener('click', function () {
-      openComments[item.id] = !openComments[item.id];
-      panel.hidden = !openComments[item.id];
-      toggle.setAttribute('aria-expanded', String(!!openComments[item.id]));
-      toggle.innerHTML = commentToggleLabel(list.length, !!openComments[item.id]);
+      var next = panel.hidden; // 閉じていれば開く
+      openComments[item.id] = next;
+      if (list.length) {
+        if (next) delete closedComments[resolveId(item.id)];
+        else closedComments[resolveId(item.id)] = list.length; // 確認して閉じた（新しいコメントが付くまで閉じたまま）
+        saveClosedComments();
+      }
+      panel.hidden = !next;
+      toggle.setAttribute('aria-expanded', String(next));
+      toggle.innerHTML = commentToggleLabel(list.length, next);
+    });
+
+    var writeBtn = wrap.querySelector('.comment-write-btn');
+    var form = wrap.querySelector('.comment-form');
+    writeBtn.addEventListener('click', function () {
+      composeOpen[item.id] = true;
+      writeBtn.hidden = true;
+      form.hidden = false;
+      form.querySelector('.comment-input').focus();
     });
 
     var input = wrap.querySelector('.comment-input');
@@ -2154,6 +2247,7 @@
       var body = input.value.trim();
       if (!body) { input.focus(); return; }
       delete commentDrafts[item.id];
+      delete composeOpen[item.id];
       openComments[item.id] = true;
       requestCommentAdd(item, body);
     });
