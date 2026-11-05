@@ -94,6 +94,10 @@
   input.edit-date.moved { border-color: var(--pending); background: var(--pending-soft); }
   .edit-date-note { font-size: .7rem; color: var(--pending); margin: 4px 0 0; }
   .compose-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+  /* 入力欄の一番下：左に写真（アプリ版）、右に「記録する」 */
+  .compose-bottom { align-items: flex-end; }
+  .compose-bottom .photo-row { flex: 1; min-width: 0; margin: 0; }
+  .compose-bottom #submitBtn { margin-left: auto; flex: none; }
   button { font: inherit; cursor: pointer; border: none; }
   .btn-primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 10px 20px; border-radius: 999px; box-shadow: var(--shadow); }
   .btn-primary:disabled { opacity: .6; cursor: default; }
@@ -260,10 +264,24 @@
     /* 下の余白は右側に持たせる（一番下までスクロールしても、左の入力欄が押し上げられないように） */
     .shell { max-width: 1180px; padding-bottom: 0; }
     .layout-main { padding-bottom: 96px; }
-    .layout { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); column-gap: 6px; align-items: start; }
+    .layout { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); column-gap: 6px; align-items: start; }
     .layout-side { position: sticky; top: var(--topbar-h, 0px); max-height: calc(100vh - var(--topbar-h, 0px)); overflow-y: auto; padding-bottom: 16px; }
-    #contentInput { min-height: 14rem; }
+    #contentInput { min-height: 7rem; }
     .jump-btn { display: none; }
+    /* 上の帯：1段目＝タイトル・日付・対応者・更新、2段目＝表示の切り替え（もとは4段） */
+    .topbar { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; column-gap: 18px; padding: 10px 18px 8px; }
+    .topbar .brand-row { grid-row: 1; grid-column: 1; }
+    .topbar .brand { font-size: 1rem; white-space: nowrap; }
+    .topbar .date-nav { grid-row: 1; grid-column: 2; margin-top: 0; }
+    .topbar .status-row { grid-row: 1; grid-column: 3; margin-top: 0; flex-wrap: nowrap; }
+    .topbar .tools-row { grid-row: 2; grid-column: 1 / -1; margin: 8px 0 0; }
+    .topbar .date-label { padding: 4px 12px; }
+    .topbar .nav-btn { width: 1.9rem; height: 1.9rem; }
+    /* 入力欄：タグを小さくして2段に収める */
+    .compose { padding: 12px 14px 10px; }
+    .compose h2 { margin-bottom: 8px; }
+    #tagRow { gap: 4px; margin-bottom: 8px; }
+    #tagRow .tag-btn { font-size: .68rem; padding: 4px 7px; letter-spacing: -.02em; }
     .layout-main .timeline { margin-top: 16px; }
   }
 
@@ -468,11 +486,11 @@
       <span class="hint">タグ（任意・複数選べます）</span>
       <div class="tag-row" id="tagRow"></div>
     </div>
-    <div class="photo-row" id="photoRow" hidden>
-      <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
-      <input type="file" id="photoInput" accept="image/*" multiple hidden>
-    </div>
-    <div class="compose-actions">
+    <div class="compose-actions compose-bottom">
+      <div class="photo-row" id="photoRow" hidden>
+        <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
+        <input type="file" id="photoInput" accept="image/*" multiple hidden>
+      </div>
       <button class="btn-primary" id="submitBtn">記録する</button>
     </div>
   </div>
@@ -832,6 +850,23 @@
     el.timeModeBtn.textContent = timeMode === 'text' ? 'スクロールに切替' : '直接入力に切替';
   }
 
+/**
+   * 内容欄を、書いた量に合わせて縦に伸ばす（画面の高さの6割まで。それ以上は欄の中でスクロール）。
+   * 最小の高さは CSS の min-height のまま。
+   */
+  function autoGrow(textarea) {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    var max = Math.round(window.innerHeight * 0.6);
+    textarea.style.height = Math.min(textarea.scrollHeight + 2, max) + 'px';
+  }
+  function bindAutoGrow(textarea) {
+    if (!textarea || textarea.dataset.autogrow) return;
+    textarea.dataset.autogrow = '1';
+    textarea.addEventListener('input', function () { autoGrow(textarea); });
+    autoGrow(textarea);
+  }
+
   function initTimeMode() {
     try { timeMode = localStorage.getItem(TIME_MODE_KEY) === 'text' ? 'text' : 'wheel'; } catch (e) { timeMode = 'wheel'; }
     applyTimeMode(el.timeInput);
@@ -1144,6 +1179,7 @@
     initHandovers();
     initToTop();
     initTimeMode();
+    bindAutoGrow(el.contentInput);
     initImages();
     updateDateUI();
     el.prevDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, -1), true); });
@@ -1368,6 +1404,7 @@
     persistStore();
 
     el.contentInput.value = '';
+    autoGrow(el.contentInput);
     el.timeInput.value = nowHHMM();
 
     render();
@@ -2837,6 +2874,7 @@
     populateSelect(card.querySelector('.edit-target'), targetOptions);
     card.querySelector('.edit-target').value = item.target;
     applyTimeMode(card.querySelector('.edit-time'));
+    bindAutoGrow(card.querySelector('.edit-content'));
     var editTags = (item.tags || []).slice();
     renderTagButtons(card.querySelector('.edit-tags'), editTags);
     var dateEl = card.querySelector('.edit-date');
