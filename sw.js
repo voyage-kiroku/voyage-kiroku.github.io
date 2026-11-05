@@ -1,7 +1,7 @@
 // ボヤージュ支援記録ノート（アプリ版）の Service Worker
 // 画面の部品（このフォルダのファイル）を端末に保存して、圏外でも起動できるようにする。
 // 記録の送受信（受付窓口への通信）や画像は保存しない。
-// 画面の部品は「保存済みのものをすぐ出し、裏で最新を取り直す」ので、更新は次に開いたときに反映される。
+// 画面の部品は「保存済みのものをすぐ出し、裏で最新を取り直す」。新しい版は、画面側が version.json と比べて自動で切り替える。
 // 保存の仕組みそのものを変えたときは CACHE の番号を上げる。
 
 var CACHE = 'srn-shell-v1';
@@ -34,6 +34,8 @@ self.addEventListener('fetch', function (event) {
   var req = event.request;
   if (req.method !== 'GET') return; // 記録の送受信（POST）は対象外
   var url = new URL(req.url);
+
+  if (url.origin === self.location.origin && /\/version\.json$/.test(url.pathname)) return; // 版の確認はいつも最新を聞く（保存しない）
 
   if (url.origin === self.location.origin) {
     event.respondWith(

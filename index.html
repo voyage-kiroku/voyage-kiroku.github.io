@@ -578,6 +578,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
+  var APP_BUILD = 'mw34feay';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -1258,7 +1259,77 @@
     if (!('serviceWorker' in navigator)) return;
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () { /* 使えない環境では通常のWebページとして動く */ });
+      setTimeout(checkForAppUpdate, 3000);
     });
+    // スマホのアプリは閉じずに再開することが多いので、画面に戻るたびにも新しい版が出ていないか確かめる
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') checkForAppUpdate();
+    });
+  }
+
+  // ---------- 新しい版への自動切り替え ----------
+  // サーバーの version.json と、この画面の版（APP_BUILD）を比べる。違えば、新しい画面を端末に保存し直してから開き直す。
+  // 入力中（書きかけ・編集中・コメント入力中・写真の選択中）は切り替えず、入力が終わってから切り替える。
+
+  var updateReady = false;
+  var updateChecking = false;
+  var UPDATE_TRIED_KEY = 'srn.updateTried';
+
+  function checkForAppUpdate() {
+    if (updateChecking || updateReady || navigator.onLine === false) return;
+    updateChecking = true;
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (v) {
+      if (!v || !v.build || v.build === APP_BUILD) return;
+      // 同じ版への切り替えは1回だけ（公開の途中などで画面がまだ古いまま返ってきても、開き直しを繰り返さない）
+      var tried = '';
+      try { tried = localStorage.getItem(UPDATE_TRIED_KEY) || ''; } catch (e) { /* 覚えられない環境でも動く */ }
+      if (tried === v.build) return;
+      return refreshShellCache().then(function () {
+        try { localStorage.setItem(UPDATE_TRIED_KEY, v.build); } catch (e) { /* 同上 */ }
+        updateReady = true;
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+          navigator.serviceWorker.getRegistration().then(function (reg) { if (reg) reg.update(); }).catch(function () {});
+        }
+        reloadWhenIdle();
+      });
+    }).catch(function () { /* 確かめられなくても、今の版のまま使える */ }).then(function () {
+      updateChecking = false;
+    });
+  }
+
+  /** 端末に保存している画面を、サーバーの最新に入れ替える */
+  function refreshShellCache() {
+    if (!window.caches) return Promise.resolve();
+    return caches.keys().then(function (keys) {
+      var name = keys.filter(function (k) { return /^srn-shell-/.test(k); })[0];
+      if (!name) return;
+      return caches.open(name).then(function (cache) {
+        return Promise.all(['./', './index.html'].map(function (u) {
+          return fetch(u, { cache: 'no-store' }).then(function (res) { if (res.ok) return cache.put(u, res); });
+        }));
+      });
+    });
+  }
+
+  function isUserBusy() {
+    return !!editingId || commentTyping || !!el.contentInput.value.trim() ||
+      (typeof composeImages !== 'undefined' && composeImages.length > 0) ||
+      (el.authView && !el.authView.hidden);
+  }
+
+  var updateNoticeShown = false;
+  function reloadWhenIdle() {
+    if (isUserBusy()) {
+      if (!updateNoticeShown) showToast('新しい版があります。入力が終わると切り替わります');
+      updateNoticeShown = true;
+      setTimeout(reloadWhenIdle, 10000);
+      return;
+    }
+    persistStore();
+    showToast('新しい版に切り替えます');
+    setTimeout(function () { location.reload(); }, 800);
   }
 
 
