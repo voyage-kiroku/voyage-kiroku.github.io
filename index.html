@@ -358,6 +358,16 @@
   /* コメント：書く欄は「＋ コメントを書く」で開く */
   .comment-write-btn { margin-top: 8px; font-size: .76rem; font-weight: 700; color: var(--accent); background: var(--surface); border: 1px dashed var(--accent); border-radius: 999px; padding: 5px 12px; }
 
+  /* スマホ：「転記モード」は使わないので隠し、文字サイズを「日ごと／絞り込み・印刷」と同じ行に。上の余白も詰めて入力欄を上げる */
+  @media (max-width: 899px) {
+    body:not(.transcribe-mode):not(.popout) .transcribe-group { display: none; } /* 転記モード中・小窓では、戻すために残す */
+    .topbar { padding: 12px 18px 10px; }
+    .tools-row { margin: 8px 18px 0; gap: 6px; }
+    .size-row > span { display: none; }
+    .size-btn { padding: 4px 9px; }
+    .compose { margin-top: 10px; }
+  }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -441,7 +451,7 @@
       <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true">日ごと</button>
       <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false">絞り込み・印刷</button>
     </div>
-    <div class="mode-tabs" role="group" aria-label="転記モード">
+    <div class="mode-tabs transcribe-group" role="group" aria-label="転記モード">
       <button type="button" class="mode-btn" id="transcribeBtn" aria-pressed="false" title="入力欄を隠し、記録だけを細く表示します（福祉見聞録と並べて転記するとき用）">転記モード</button>
       <button type="button" class="mode-btn" id="popoutBtn" title="福祉見聞録と並べられる細い別ウィンドウで、転記モードを開きます">小窓で開く</button>
     </div>
