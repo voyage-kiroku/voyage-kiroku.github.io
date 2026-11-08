@@ -436,6 +436,8 @@
   .pg-temp { font-size: .66rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
   .pg-who { margin-left: auto; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .pg-who.pg-sending { color: var(--pending); }
+  .pg-inline { margin-top: 6px; gap: 5px; }
+  .pg-inline .pg-chip { padding: 5px 12px; }
   .pg-preview { font-size: .82rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pg-preview.has { color: var(--ink); }
   .pg-badge { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin-right: 6px; vertical-align: 1px; }
@@ -613,7 +615,7 @@
       <div class="pg-main">
         <div class="pg-summary" id="pgSummary"></div>
         <div class="pg-list" id="pgList"></div>
-        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では理由の欄が開きます。名前のところをタップすると、様子・対応を書けます。</p>
+        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の下に理由のボタンが出るので、あとから選べます（遅刻・早退・その他は内容を書く欄が開きます）。名前のところをタップすると、様子・対応を書けます。</p>
         <div class="pg-card">
           <div class="pg-review-head"><label class="hint" for="pgReview">振り返り（内容・様子など）</label><span class="pg-review-who" id="pgReviewWho"></span></div>
           <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
@@ -732,7 +734,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw7fd2kp';
+  var APP_BUILD = 'mw8guewz';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -3479,9 +3481,18 @@
     try { localStorage.setItem(PROG_NAMES_KEY, JSON.stringify(list.slice(0, 30))); } catch (e) { /* 無視 */ }
   }
 
-  function progBadgeHtml(r) {
+  /** 閉じた行で、△／の理由を後から選べるボタン（選んだものは色が付く） */
+  function progInlineReasonsHtml(r) {
     if (r.mark !== '△' && r.mark !== '／') return '';
-    if (!r.reason) return '<span class="pg-badge need">' + (r.mark === '△' ? '遅刻か早退かを選んでください' : '欠席の理由を選んでください') + '</span>';
+    return '<div class="pg-chips pg-inline">' + PROG_REASONS[r.mark].map(function (x) {
+      return '<button type="button" class="pg-chip" data-reason="' + x + '" aria-pressed="' + (r.reason === x) + '">' + x + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function progBadgeHtml(r, open) {
+    if (r.mark !== '△' && r.mark !== '／') return '';
+    if (!open) return (progNeedsText(r.mark, r.reason) && r.reasonText) ? '<span class="pg-badge ' + (r.mark === '△' ? 'late' : 'absent') + '">' + escapeHtml(r.reasonText) + '</span>' : '';
+    if (!r.reason) return '<span class="pg-badge need">' + (r.mark === '△' ? '名前をタップして遅刻か早退かを選ぶ' : '名前をタップして欠席の理由を選ぶ') + '</span>';
     var label = r.mark === '△' ? r.reason : '欠席・' + r.reason;
     if (progNeedsText(r.mark, r.reason) && r.reasonText) label += '：' + r.reasonText;
     return '<span class="pg-badge ' + (r.mark === '△' ? 'late' : 'absent') + '">' + escapeHtml(label) + '</span>';
@@ -3497,7 +3508,8 @@
       '<div class="pg-body"><div class="pg-head">' + (progSplitName(name).room ? '<span class="pg-room">' + escapeHtml(progSplitName(name).room) + '</span>' : '') + '<span class="pg-name">' + escapeHtml(progSplitName(name).name) + '</span>' +
       (r.temp ? '<span class="pg-temp">臨時</span>' : '') +
       '<span class="' + whoCls + '">' + who + '</span></div>' +
-      '<div class="pg-preview' + (r.memo ? ' has' : '') + '">' + progBadgeHtml(r) +
+      (open ? '' : progInlineReasonsHtml(r)) +
+      '<div class="pg-preview' + (r.memo ? ' has' : '') + '">' + progBadgeHtml(r, open) +
       (r.memo ? escapeHtml(r.memo) : '＋ 様子・対応を書く') + '</div></div>';
     if (open) {
       html += '<div class="pg-edit">';
@@ -3724,8 +3736,8 @@
         var next = PROG_MARKS[(PROG_MARKS.indexOf(r.mark) + 1) % PROG_MARKS.length];
         progEnqueue('row', { slot: prog.slot, target: name, fields: { mark: next } });
         if (prog.drafts[k]) delete prog.drafts[k].reasonText; // 理由は選び直し
-        if (next === '△' || next === '／') progOpenRow(name);
-        else if (prog.open === name && !(prog.drafts[k] && prog.drafts[k].memo !== undefined)) progCloseRow(name);
+        // 印を付けても記入欄は自動で開かない（理由や内容は、名前の部分をタップして開いたときに書く）
+        if (next !== '△' && next !== '／' && prog.open === name && !(prog.drafts[k] && prog.drafts[k].memo !== undefined)) progCloseRow(name);
         renderProgram();
         return;
       }
@@ -3735,6 +3747,7 @@
         var fields = { reason: reason };
         if (!progNeedsText(r.mark, reason)) { fields.reasonText = ''; if (prog.drafts[k]) delete prog.drafts[k].reasonText; }
         progEnqueue('row', { slot: prog.slot, target: name, fields: fields });
+        if (reason && progNeedsText(r.mark, reason) && prog.open !== name) progOpenRow(name); // 内容を書く欄が要る理由だけ開く
         renderProgram();
         var t = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(name) + '"] .pg-reason-text');
         if (t && reason && !t.value) t.focus();
