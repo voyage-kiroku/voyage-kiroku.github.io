@@ -374,6 +374,108 @@
   .hide-night-label:has(input:checked) { color: var(--ink); }
   .chip-private { background: var(--ink); color: var(--bg); }
 
+  /* ---------- 最上部の切り替え（支援記録 ⇔ プログラム）。画面の名前も兼ねる ---------- */
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0; }
+  .app-switch { flex: 1; min-width: 0; max-width: 420px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 14px; background: var(--surface-2); }
+  .app-btn { font-family: "Zen Maru Gothic","Zen Kaku Gothic New",sans-serif; font-size: .98rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 11px; padding: 8px 4px; white-space: nowrap; }
+  .app-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+  body.popout .app-switch { display: none; }
+  @media (min-width: 900px) { .app-switch { width: 300px; flex: none; } .app-btn { font-size: .9rem; padding: 6px 4px; } }
+
+  /* プログラムの画面を出している間は、支援記録の部品を隠す */
+  #progView { display: none; }
+  body.app-prog #progView { display: block; }
+  body.app-prog .layout, body.app-prog #modeTabs, body.app-prog .transcribe-group, body.app-prog .jump-btn { display: none !important; }
+  body.app-prog #dateNav[hidden] { display: flex !important; }
+
+  /* ---------- プログラム記録 ---------- */
+  .pg-card { margin: 12px 18px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+  .pg-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-2); }
+  .pg-slot-btn { font-weight: 700; font-size: .95rem; color: var(--muted); background: transparent; border-radius: 9px; padding: 9px 0; }
+  .pg-slot-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .pg-slot-btn small { font-weight: 500; font-size: .72rem; margin-left: 4px; color: var(--muted); }
+  .pg-info-sum { list-style: none; display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 2px 0; cursor: pointer; font-size: .88rem; }
+  .pg-info-sum::-webkit-details-marker { display: none; }
+  .pg-info-text { flex: 1; min-width: 0; }
+  .pg-info-text .pg-sub { color: var(--muted); }
+  .pg-info-text .pg-empty { color: var(--pending); font-weight: 700; }
+  .pg-info-edit { flex: none; font-size: .74rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 11px; }
+  details[open] > .pg-info-sum { display: none; }
+  .pg-card label.hint { margin-top: 12px; }
+  .pg-input { display: block; width: 100%; height: 2.75rem; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; }
+  .pg-input:disabled, .pg-card textarea:disabled, .pg-edit textarea:disabled { background: var(--surface-2); color: var(--muted); }
+  .pg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pg-chip { font-size: .8rem; font-weight: 700; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+  .pg-chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-soft-ink); border-color: var(--accent); }
+  .pg-chip:disabled { cursor: default; }
+  .pg-done-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+  .pg-summary { position: sticky; top: var(--topbar-h, 0px); z-index: 10; margin: 12px 18px 0; display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; background: var(--bg); padding: 8px 2px; font-size: .84rem; }
+  .pg-summary .pg-tot { font-weight: 700; }
+  .pg-summary .pg-cnt { color: var(--muted); white-space: nowrap; }
+  .pg-summary .pg-cnt b { color: var(--ink); }
+  .pg-list { margin: 4px 18px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+  .pg-row { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); border-top: 1px solid var(--line); transition: background-color .9s; }
+  .pg-row:first-child { border-top: none; }
+  .pg-row.pg-flash { background: var(--pending-soft); transition: none; }
+  .pg-mark { width: 3.4rem; min-height: 3.6rem; font-size: 1.6rem; font-weight: 700; line-height: 1; background: var(--surface-2); color: var(--ink); border-right: 1px solid var(--line); border-radius: 0; padding: 0; }
+  .pg-mark[data-m="〇"] { background: var(--good-soft); color: var(--good); }
+  .pg-mark[data-m="△"] { background: var(--pending-soft); color: var(--pending); }
+  .pg-mark[data-m="／"] { color: var(--muted); }
+  .pg-mark:disabled { cursor: default; }
+  .pg-body { padding: 9px 12px; min-width: 0; cursor: pointer; }
+  .pg-head { display: flex; align-items: baseline; gap: 8px; }
+  .pg-name { font-weight: 700; font-size: 1rem; }
+  .pg-room { font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pg-temp { font-size: .66rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+  .pg-who { margin-left: auto; font-size: .68rem; color: var(--muted); white-space: nowrap; }
+  .pg-who.pg-sending { color: var(--pending); }
+  .pg-preview { font-size: .82rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pg-preview.has { color: var(--ink); }
+  .pg-badge { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin-right: 6px; vertical-align: 1px; }
+  .pg-badge.late { background: var(--pending-soft); color: var(--pending); }
+  .pg-badge.absent { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .pg-badge.need { background: var(--danger-soft); color: var(--danger); }
+  .pg-edit { grid-column: 1 / -1; padding: 0 12px 12px; display: none; }
+  .pg-row.open .pg-edit { display: block; }
+  .pg-row.open .pg-preview { white-space: normal; }
+  .pg-reason { margin-bottom: 8px; padding: 10px; border-radius: 12px; background: var(--surface-2); }
+  .pg-reason .pg-ttl { font-size: .72rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .pg-reason .pg-chips + .pg-input { margin-top: 8px; height: 2.5rem; }
+  .pg-edit textarea, .pg-card textarea { margin-bottom: 0; }
+  .pg-remote { font-size: .76rem; color: var(--pending); background: var(--pending-soft); border-radius: 8px; padding: 6px 9px; margin-bottom: 8px; line-height: 1.5; }
+  .pg-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .pg-actions .pg-right { display: flex; gap: 8px; margin-left: auto; }
+  .pg-btn { font-size: .8rem; font-weight: 700; border-radius: 999px; padding: 7px 14px; background: var(--surface-2); color: var(--ink); }
+  .pg-btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .pg-btn.danger { background: transparent; color: var(--danger); padding-left: 0; }
+  .pg-add { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px dashed var(--line); align-items: center; }
+  .pg-add select { flex: 1; min-width: 0; height: 2.5rem; }
+  .pg-note { font-size: .72rem; color: var(--muted); margin: 8px 18px 0; line-height: 1.6; }
+  .pg-ro { margin: 12px 18px 0; font-size: .8rem; color: var(--pending); background: var(--pending-soft); border-radius: 12px; padding: 8px 12px; }
+  .pg-loading, .pg-empty-list { padding: 18px; font-size: .85rem; color: var(--muted); text-align: center; }
+  .pg-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pg-review-head label.hint { margin: 0 0 4px; }
+  .pg-review-who { font-size: .7rem; color: var(--muted); }
+  @media (min-width: 900px) {
+    .pg-grid { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); column-gap: 6px; align-items: start; }
+    .pg-side { position: sticky; top: var(--topbar-h, 0px); }
+    .pg-main { padding-bottom: 96px; }
+  }
+
+  /* プログラム記録の印刷（今の確認表と同じく、上に午前・下に午後） */
+  @media print {
+    #printView.pp .pp-sec + .pp-sec { margin-top: 7mm; }
+    #printView.pp .pp-hd { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1.5pt solid #000; padding-bottom: 2px; }
+    #printView.pp .pp-hd b { font-size: 13pt; }
+    #printView.pp .pp-meta { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 4px 0; font-size: 9.5pt; }
+    #printView.pp table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    #printView.pp th, #printView.pp td { border: 1px solid #000; padding: 2px 5px; vertical-align: top; font-size: 9.5pt; word-break: break-word; white-space: pre-wrap; }
+    #printView.pp th { background: #eee; }
+    #printView.pp td.mk { text-align: center; font-size: 11pt; }
+    #printView.pp .pp-rv { border: 1px solid #000; border-top: none; padding: 3px 5px; min-height: 14mm; white-space: pre-wrap; font-size: 9.5pt; }
+    #printView.pp tr { break-inside: avoid; }
+  }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -431,7 +533,11 @@
 <div class="shell">
   <div class="topbar">
     <div class="brand-row">
-      <h1 class="brand">ボヤージュ支援記録ノート</h1>
+      <h1 class="brand sr-only">ボヤージュ支援記録ノート</h1>
+      <div class="app-switch" role="group" aria-label="支援記録とプログラム記録の切り替え">
+        <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true">📝 支援記録</button>
+        <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false">✅ プログラム</button>
+      </div>
       <button type="button" class="jump-btn" id="jumpBtn">✎ 入力へ</button>
     </div>
     <div class="date-nav" id="dateNav">
@@ -453,7 +559,7 @@
   </div>
 
   <div class="tools-row">
-    <div class="mode-tabs" role="group" aria-label="表示の切り替え">
+    <div class="mode-tabs" id="modeTabs" role="group" aria-label="表示の切り替え">
       <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true">日ごと</button>
       <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false">絞り込み・印刷</button>
     </div>
@@ -475,6 +581,43 @@
     <div class="conflict-actions">
       <button type="button" class="op-btn" id="conflictCopyBtn">入力内容をコピー</button>
       <button type="button" class="op-btn" id="conflictCloseBtn">閉じる</button>
+    </div>
+  </div>
+
+
+  <div id="progView">
+    <p class="pg-ro" id="pgReadonly" hidden>宿直の方は見るだけです（〇やメモは付けられません）</p>
+    <div class="pg-grid">
+      <div class="pg-side">
+        <div class="pg-card">
+          <div class="pg-slots" role="group" aria-label="午前・午後">
+            <button type="button" class="pg-slot-btn" data-slot="AM" aria-pressed="true">午前 <small>AM</small></button>
+            <button type="button" class="pg-slot-btn" data-slot="PM" aria-pressed="false">午後 <small>PM</small></button>
+          </div>
+          <details id="pgInfo">
+            <summary class="pg-info-sum"><span class="pg-info-text" id="pgInfoText"></span><span class="pg-info-edit">変更</span></summary>
+            <label class="hint" for="pgProgName">プログラム名（候補から選ぶか、そのまま入力）</label>
+            <input type="text" class="pg-input" id="pgProgName" list="pgProgList" autocomplete="off" enterkeyhint="done" placeholder="例）軽作業">
+            <datalist id="pgProgList"></datalist>
+            <label class="hint">担当職員（タップで選ぶ）</label>
+            <div class="pg-chips" id="pgStaff"></div>
+            <div class="pg-done-row"><button type="button" class="pg-btn" id="pgInfoDone">閉じる</button></div>
+          </details>
+        </div>
+      </div>
+      <div class="pg-main">
+        <div class="pg-summary" id="pgSummary"></div>
+        <div class="pg-list" id="pgList"></div>
+        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では理由の欄が開きます。名前のところをタップすると、様子・対応を書けます。</p>
+        <div class="pg-card">
+          <div class="pg-review-head"><label class="hint" for="pgReview">振り返り（内容・様子など）</label><span class="pg-review-who" id="pgReviewWho"></span></div>
+          <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
+          <div class="pg-actions">
+            <button type="button" class="pg-btn" id="pgPrintBtn">🖨 印刷（午前・午後）</button>
+            <button type="button" class="pg-btn primary" id="pgReviewSave" hidden>振り返りを保存</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -585,7 +728,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw73rhv4';
+  var APP_BUILD = 'mw78fbll';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -1035,7 +1178,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -1051,7 +1194,7 @@
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
         return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor, staffRole: p.staffRole,
-          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, dateKey: res.dateKey, records: res.records };
+          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, programMembers: res.programMembers, programStaff: res.programStaff, dateKey: res.dateKey, records: res.records };
       }
       return res;
     });
@@ -1103,6 +1246,7 @@
     if (me && me.email && p.email && me.email !== p.email) {
       me = null; baseRecords = []; queue = []; tempIdMap = {};
       persistStore();
+      progResetForUser();
     }
     token = res.token;
     saveToken(token);
@@ -1196,6 +1340,7 @@
 
     initFontSize();
     initTranscribeMode();
+    initProgram();
     initHideMtg();
     initHandovers();
     initToTop();
@@ -1376,6 +1521,8 @@
     render();
     flushQueue();
     loadHandovers();
+    if (data.programMembers) { progMembers = data.programMembers; progStaff = data.programStaff || []; progPersist(); }
+    if (appMode === 'prog') { renderProgram(); progFlush(); progLoad(true).catch(function () { /* 表示は renderProgram が出す */ }); }
 
     if (!el.submitBtn.dataset.bound) {
       el.submitBtn.dataset.bound = '1';
@@ -1416,6 +1563,7 @@
     if (key === viewDateKey) { updateDateUI(); return; }
     userPickedDate = !!byUser && key !== today;
     viewDateKey = key;
+    if (appMode === 'prog') progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
     editingId = null;
     baseRecords = [];
     clearError();
@@ -1964,15 +2112,16 @@
   function flushQueueSoon() { setTimeout(flushQueue, 300); }
 
   function setSyncStatus() {
-    if (queue.length === 0) {
+    var pendingCount = queue.length + (progQueue ? progQueue.length : 0); // プログラム記録の送信待ちも数える
+    if (pendingCount === 0) {
       el.syncPill.className = 'sync-pill synced';
       el.syncPillText.textContent = '同期済み';
     } else if (navigator.onLine === false) {
       el.syncPill.className = 'sync-pill offline';
-      el.syncPillText.textContent = 'オフライン・保存待ち ' + queue.length + '件';
+      el.syncPillText.textContent = 'オフライン・保存待ち ' + pendingCount + '件';
     } else {
       el.syncPill.className = 'sync-pill pending';
-      el.syncPillText.textContent = '送信中… 残り' + queue.length + '件';
+      el.syncPillText.textContent = '送信中… 残り' + pendingCount + '件';
     }
   }
 
@@ -2162,6 +2311,7 @@
       }),
       loadHandovers()
     ];
+    if (appMode === 'prog') { progFlush(); jobs.push(progLoad(true)); }
     if (viewMode === 'filter' && lastSearch) {
       var q = lastSearch.q;
       jobs.push(callServer('searchRecords', q, SEARCH_TIMEOUT_MS).then(function (res) {
@@ -2933,6 +3083,7 @@
         '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
       '</tr>';
     }).join('');
+    el.printView.className = '';
     el.printView.innerHTML =
       '<h1 class="pv-title">ボヤージュ支援記録ノート　記録一覧</h1>' +
       '<p class="pv-cond">' + escapeHtml(cond.join('　／　')) + '</p>' +
@@ -3039,6 +3190,681 @@
       if (newDate !== originalDate) showToast(dateKeyLabel(newDate) + ' に移しました');
       if (onClose) onClose(true, item, values);
     });
+  }
+
+  // ---------- プログラム記録（最上部の「プログラム」） ----------
+  // サーバーの内容（prog.data）に、送信待ちの操作（progQueue）を重ねて表示する。
+  // 表示中は数秒ごとに getProgram を呼び、他の職員の入力を取り込む（変わっていなければサーバーはファイルを開かずに返す）。
+
+  var APP_KEY = 'srn.app';               // 前回開いていた画面（'log' / 'prog'）
+  var PROG_STORE_KEY = 'srn.prog.v1';
+  var PROG_NAMES_KEY = 'srn.progNames';  // この端末で入力したプログラム名（候補に出す）
+  var PROG_POLL_MS = 5000;
+  var PROG_MARKS = ['', '〇', '△', '／'];
+  var PROG_REASONS = { '△': ['遅刻', '早退'], '／': ['受診', '入院中', 'その他'] };
+  var PROG_SLOT_LABEL = { AM: '午前', PM: '午後' };
+  var appMode = 'log';
+  var progMembers = [];   // 名簿（利用者マスタ B列の順）
+  var progStaff = [];     // 担当職員の選択肢
+  var progQueue = [];     // 送信待ち [{ opId, kind: 'row' | 'slot', payload }]
+  var prog = {
+    slot: new Date().getHours() < 12 ? 'AM' : 'PM',
+    dateKey: null, data: null, rev: '',
+    open: null,          // メモ欄を開いている利用者
+    drafts: {},          // 書きかけ（'AM|名前' → { memo, reasonText }）
+    memoBase: {},        // メモ欄を開いたときのメモ（同時編集の見分け用）
+    reviewBase: null, reviewDirty: false,
+    infoKey: '', timer: null, flushing: false, sending: null,
+    loadSeq: 0, commitSeq: 0, polling: false, listDirty: false, flash: {}
+  };
+
+  function progKey(slot, target) { return slot + '|' + target; }
+  function isProgReadonly() { return isNightMe(); }
+  function progNeedsText(mark, reason) { return mark === '△' || (mark === '／' && reason === 'その他'); }
+  function emptySlot() { return { prog: '', staff: [], review: '', by: '', at: '' }; }
+
+  function progLoadStore() {
+    try {
+      var s = JSON.parse(localStorage.getItem(PROG_STORE_KEY) || '{}');
+      progMembers = s.members || [];
+      progStaff = s.staff || [];
+      progQueue = s.queue || [];
+      if (s.dateKey && s.data) { prog.dateKey = s.dateKey; prog.data = s.data; }
+    } catch (e) { /* 読めなければ空から */ }
+  }
+  function progPersist() {
+    try {
+      localStorage.setItem(PROG_STORE_KEY, JSON.stringify({ members: progMembers, staff: progStaff, queue: progQueue, dateKey: prog.dateKey, data: prog.data }));
+    } catch (e) { /* 容量不足などは無視 */ }
+  }
+  /** アプリ版で別の職員に切り替わったとき、前の人の送信待ちを引き継がない */
+  function progResetForUser() {
+    progQueue = []; prog.data = null; prog.dateKey = null; prog.rev = ''; prog.drafts = {}; prog.memoBase = {}; prog.open = null;
+    progPersist();
+  }
+
+  function applyRowFields(r, f) {
+    f = f || {};
+    if (f.mark !== undefined) {
+      if (r.mark !== f.mark && f.reason === undefined) { r.reason = ''; r.reasonText = ''; } // 印が変わったら理由は選び直し
+      r.mark = f.mark;
+    }
+    if (f.reason !== undefined) r.reason = f.reason;
+    if (f.reasonText !== undefined) r.reasonText = f.reasonText;
+    if (f.memo !== undefined) r.memo = f.memo;
+  }
+  function applySlotFields(s, f) {
+    f = f || {};
+    if (f.prog !== undefined) s.prog = f.prog;
+    if (f.staff !== undefined) s.staff = f.staff.slice();
+    if (f.review !== undefined) s.review = f.review;
+  }
+
+  /** 今の画面に出す内容（サーバーの内容＋送信待ち） */
+  function progView() {
+    var d = prog.data || { slots: {}, rows: [] };
+    var slots = {};
+    ['AM', 'PM'].forEach(function (k) {
+      var src = (d.slots && d.slots[k]) || emptySlot();
+      slots[k] = { prog: src.prog || '', staff: (src.staff || []).slice(), review: src.review || '', by: src.by || '', at: src.at || '' };
+    });
+    var rows = {}, order = [];
+    (d.rows || []).forEach(function (r) {
+      var k = progKey(r.slot, r.target);
+      rows[k] = Object.assign({}, r);
+      order.push(k);
+    });
+    progQueue.forEach(function (op) {
+      var p = op.payload;
+      if (p.dateKey !== prog.dateKey) return;
+      if (op.kind === 'slot') { applySlotFields(slots[p.slot], p.fields); slots[p.slot]._pending = true; return; }
+      var k = progKey(p.slot, p.target);
+      if (p.remove) { delete rows[k]; return; }
+      var r = rows[k];
+      if (!r) {
+        r = rows[k] = { slot: p.slot, target: p.target, temp: progMembers.indexOf(p.target) === -1, mark: '', reason: '', reasonText: '', memo: '', by: '', at: '' };
+        order.push(k);
+      }
+      applyRowFields(r, p.fields);
+      r._pending = true;
+    });
+    return { slots: slots, rows: rows, order: order };
+  }
+
+  /** その枠に並べる名前（名簿の順。そのあとに臨時の参加者など、名簿にない人） */
+  function progNames(v, slot) {
+    var names = progMembers.slice();
+    v.order.forEach(function (k) {
+      var r = v.rows[k];
+      if (r && r.slot === slot && names.indexOf(r.target) === -1) names.push(r.target);
+    });
+    return names;
+  }
+  function progRowOf(v, slot, name) {
+    return v.rows[progKey(slot, name)] || { slot: slot, target: name, temp: false, mark: '', reason: '', reasonText: '', memo: '', by: '', at: '' };
+  }
+
+  // ----- 送信 -----
+
+  function progEnqueue(kind, payload) {
+    payload.dateKey = prog.dateKey;
+    // まだ送っていない同じマスの操作があれば、1つにまとめる（〇△／を続けてタップしたときに送る回数を減らす）
+    for (var i = progQueue.length - 1; i >= 0; i--) {
+      var q = progQueue[i];
+      if (q === prog.sending) break;
+      if (q.kind !== kind || q.payload.dateKey !== payload.dateKey || q.payload.slot !== payload.slot) continue;
+      if (kind === 'row' && q.payload.target !== payload.target) continue;
+      if (q.payload.remove || payload.remove) break;
+      var a = q.payload.fields, b = payload.fields || {};
+      if (b.mark !== undefined && b.reason === undefined) { delete a.reason; delete a.reasonText; }
+      Object.assign(a, b);
+      if (payload.memoBase !== undefined && q.payload.memoBase === undefined) q.payload.memoBase = payload.memoBase;
+      if (payload.reviewBase !== undefined && q.payload.reviewBase === undefined) q.payload.reviewBase = payload.reviewBase;
+      progPersist(); setSyncStatus(); progFlush();
+      return;
+    }
+    progQueue.push({ opId: uid(), kind: kind, payload: payload });
+    progPersist();
+    setSyncStatus();
+    progFlush();
+  }
+
+  function isProgConflict(err) {
+    return !!err && (err.code === 'CONFLICT' || err.conflict === true || String(err.message || err.error || '').indexOf('先に書き換えられていました') !== -1);
+  }
+
+  function progFlush() {
+    if (prog.flushing || !progQueue.length || !me) return;
+    if (navigator.onLine === false) { setSyncStatus(); return; }
+    var op = progQueue[0];
+    prog.flushing = true;
+    prog.sending = op;
+    callServer(op.kind === 'slot' ? 'saveProgramSlot' : 'saveProgramRow', op.payload).then(function (res) {
+      prog.flushing = false; prog.sending = null;
+      if (res && res.ok === false) { progOpFailed(op, res); return; }
+      var i = progQueue.indexOf(op);
+      if (i !== -1) progQueue.splice(i, 1);
+      progCommit(op, res || {});
+      progPersist();
+      setSyncStatus();
+      renderProgram();
+      progFlush();
+    }).catch(function (err) {
+      prog.flushing = false; prog.sending = null;
+      if (err && (err.isNetwork || err.isTimeout)) { setSyncStatus(); return; } // 次の見回りで送り直す
+      op.tries = (op.tries || 0) + 1;
+      var permanent = isProgConflict(err) || (err && (err.code === 'INVALID' || err.code === 'FORBIDDEN')) || isPermanentError_(err) ||
+        /正しくありません|できません|ない名前|見るだけ|選べない|指定されていません/.test(String((err && err.message) || ''));
+      if (!permanent && op.tries < 5) { progPersist(); setSyncStatus(); return; } // 一時的な失敗とみなして、次の見回りで送り直す
+
+      progOpFailed(op, err);
+    });
+  }
+
+  /** 送れた操作を、手元のサーバー内容に書き込む（次の読み込みまで表示が戻らないように） */
+  function progCommit(op, res) {
+    prog.commitSeq++;
+    var p = op.payload;
+    if (!prog.data || prog.dateKey !== p.dateKey) return;
+    if (op.kind === 'slot') {
+      var s = prog.data.slots[p.slot] || (prog.data.slots[p.slot] = emptySlot());
+      applySlotFields(s, p.fields);
+      s.by = res.by || (me && me.staffName) || ''; s.at = res.at || '';
+      return;
+    }
+    var rows = prog.data.rows;
+    var idx = -1;
+    for (var i = 0; i < rows.length; i++) { if (rows[i].slot === p.slot && rows[i].target === p.target) { idx = i; break; } }
+    if (p.remove) { if (idx !== -1) rows.splice(idx, 1); return; }
+    var r = idx !== -1 ? rows[idx] : null;
+    if (!r) {
+      r = { slot: p.slot, target: p.target, temp: progMembers.indexOf(p.target) === -1, mark: '', reason: '', reasonText: '', memo: '', by: '', at: '' };
+      rows.push(r);
+    }
+    applyRowFields(r, p.fields);
+    r.by = res.by || (me && me.staffName) || ''; r.at = res.at || '';
+  }
+
+  function progOpFailed(op, err) {
+    var i = progQueue.indexOf(op);
+    if (i !== -1) progQueue.splice(i, 1);
+    progPersist();
+    setSyncStatus();
+    if (isProgConflict(err)) {
+      var f = op.payload.fields || {};
+      conflictText = String(f.memo !== undefined ? f.memo : (f.review !== undefined ? f.review : ''));
+      el.conflictMsg.textContent = String((err && (err.error || err.message)) || '別の端末で先に書き換えられていました。') +
+        'あなたの入力は保存されていません。最新の内容を確認してから、必要なら書き直してください。あなたが入力した内容は「入力内容をコピー」で取り出せます。';
+      el.conflictBanner.hidden = false;
+      var k = op.kind === 'row' ? progKey(op.payload.slot, op.payload.target) : null;
+      if (k) { delete prog.memoBase[k]; delete prog.drafts[k]; }
+    } else {
+      showError(String((err && (err.error || err.message)) || '保存できませんでした。'), true);
+    }
+    progLoad(true);
+  }
+
+  // ----- 読み込み -----
+
+  function progLoad(force) {
+    if (!me) return Promise.resolve();
+    var key = viewDateKey;
+    if (prog.dateKey !== key) {
+      prog.dateKey = key; prog.data = null; prog.rev = ''; prog.open = null; prog.drafts = {}; prog.memoBase = {};
+      prog.reviewDirty = false; prog.reviewBase = null; prog.flash = {};
+      renderProgram();
+      force = true;
+    }
+    if (!force && prog.polling) return Promise.resolve();
+    var seq = ++prog.loadSeq, commitAt = prog.commitSeq;
+    prog.polling = true;
+    return callServer('getProgram', { dateKey: key, rev: force ? '' : prog.rev }).then(function (res) {
+      if (seq === prog.loadSeq) prog.polling = false;
+      if (key !== prog.dateKey || seq !== prog.loadSeq) return;
+      if (!res || res.ok === false || res.unchanged) return;
+      if (commitAt !== prog.commitSeq) { prog.rev = ''; return; } // 読んでいる間に自分の保存が済んだ：古い内容なので次で読み直す
+      progApply(res);
+    }).catch(function (err) {
+      if (seq === prog.loadSeq) prog.polling = false;
+      if (key === prog.dateKey && !prog.data) renderProgram(true);
+      throw err;
+    });
+  }
+
+  function progApply(res) {
+    var prev = prog.data;
+    if (res.members) progMembers = res.members;
+    if (res.staffList) progStaff = res.staffList;
+    if (prev && me) { // 他の職員が変えたマスに色を付ける
+      var old = {};
+      (prev.rows || []).forEach(function (r) { old[progKey(r.slot, r.target)] = r; });
+      (res.rows || []).forEach(function (r) {
+        var k = progKey(r.slot, r.target), o = old[k];
+        var changed = !o || o.mark !== r.mark || o.reason !== r.reason || o.reasonText !== r.reasonText || o.memo !== r.memo;
+        if (changed && r.by && r.by !== me.staffName) prog.flash[k] = true;
+      });
+    }
+    prog.data = { slots: res.slots || {}, rows: res.rows || [] };
+    prog.rev = res.rev || '';
+    progPersist();
+    renderProgram();
+  }
+
+  function progStartPolling() {
+    progStopPolling();
+    prog.timer = setInterval(function () {
+      if (document.visibilityState !== 'visible' || appMode !== 'prog') return;
+      progFlush();
+      if (navigator.onLine !== false) progLoad(false).catch(function () { /* 次の見回りで */ });
+    }, PROG_POLL_MS);
+  }
+  function progStopPolling() { if (prog.timer) { clearInterval(prog.timer); prog.timer = null; } }
+
+  // ----- 画面 -----
+
+  function setApp(mode, remember) {
+    if (isPopout) mode = 'log'; // 小窓（転記用）は支援記録だけ
+    appMode = mode === 'prog' ? 'prog' : 'log';
+    document.body.classList.toggle('app-prog', appMode === 'prog');
+    el.appLogBtn.setAttribute('aria-pressed', appMode === 'log' ? 'true' : 'false');
+    el.appProgBtn.setAttribute('aria-pressed', appMode === 'prog' ? 'true' : 'false');
+    if (remember) { try { localStorage.setItem(APP_KEY, appMode); } catch (e) { /* 覚えられなくても動く */ } }
+    if (appMode === 'prog') {
+      el.dateNav.hidden = false;
+      renderProgram();
+      progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
+      progFlush();
+      progStartPolling();
+      setTimeout(updateTopbarHeight, 0);
+      window.scrollTo(0, 0);
+    } else {
+      progStopPolling();
+      setMode(viewMode); // 支援記録の表示（日ごと／絞り込み）を元どおりに
+    }
+  }
+
+  function progHistoryNames() {
+    try { return JSON.parse(localStorage.getItem(PROG_NAMES_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function rememberProgName(name) {
+    if (!name) return;
+    var list = progHistoryNames().filter(function (n) { return n !== name; });
+    list.unshift(name);
+    try { localStorage.setItem(PROG_NAMES_KEY, JSON.stringify(list.slice(0, 30))); } catch (e) { /* 無視 */ }
+  }
+
+  function progBadgeHtml(r) {
+    if (r.mark !== '△' && r.mark !== '／') return '';
+    if (!r.reason) return '<span class="pg-badge need">' + (r.mark === '△' ? '遅刻か早退かを選んでください' : '欠席の理由を選んでください') + '</span>';
+    var label = r.mark === '△' ? r.reason : '欠席・' + r.reason;
+    if (progNeedsText(r.mark, r.reason) && r.reasonText) label += '：' + r.reasonText;
+    return '<span class="pg-badge ' + (r.mark === '△' ? 'late' : 'absent') + '">' + escapeHtml(label) + '</span>';
+  }
+
+  function progRowHtml(name, r, ro) {
+    var k = progKey(prog.slot, name), open = prog.open === name;
+    var draft = prog.drafts[k] || {};
+    var whoCls = 'pg-who' + (r._pending ? ' pg-sending' : '');
+    var who = r._pending ? '送信待ち' : (r.by ? escapeHtml(r.by) + (r.at ? ' ' + escapeHtml(r.at) : '') : '');
+    var html = '<div class="pg-row' + (open ? ' open' : '') + '" data-name="' + escapeHtml(name) + '">' +
+      '<button type="button" class="pg-mark" data-m="' + r.mark + '" aria-label="' + escapeHtml(progSplitName(name).name) + 'の出欠：' + (r.mark || '未記入') + '"' + (ro ? ' disabled' : '') + '>' + r.mark + '</button>' +
+      '<div class="pg-body"><div class="pg-head">' + (progSplitName(name).room ? '<span class="pg-room">' + escapeHtml(progSplitName(name).room) + '</span>' : '') + '<span class="pg-name">' + escapeHtml(progSplitName(name).name) + '</span>' +
+      (r.temp ? '<span class="pg-temp">臨時</span>' : '') +
+      '<span class="' + whoCls + '">' + who + '</span></div>' +
+      '<div class="pg-preview' + (r.memo ? ' has' : '') + '">' + progBadgeHtml(r) +
+      (r.memo ? escapeHtml(r.memo) : (ro ? '' : '＋ 様子・対応を書く')) + '</div></div>';
+    if (open) {
+      html += '<div class="pg-edit">';
+      var base = prog.memoBase[k];
+      if (!ro && base !== undefined && !r._pending && r.memo !== base) {
+        html += '<p class="pg-remote">別の端末でメモが書き換えられました（' + escapeHtml(r.by || '') + '）。このまま保存すると、保存できない旨のお知らせが出ます。いったん閉じて開き直すと最新の内容から書けます。</p>';
+      }
+      if (r.mark === '△' || r.mark === '／') {
+        html += '<div class="pg-reason"><div class="pg-ttl">' + (r.mark === '△' ? '遅刻・早退' : '欠席の理由') + '</div><div class="pg-chips">' +
+          PROG_REASONS[r.mark].map(function (x) {
+            return '<button type="button" class="pg-chip" data-reason="' + x + '" aria-pressed="' + (r.reason === x) + '"' + (ro ? ' disabled' : '') + '>' + x + '</button>';
+          }).join('') + '</div>';
+        if (progNeedsText(r.mark, r.reason)) {
+          var rt = draft.reasonText !== undefined ? draft.reasonText : r.reasonText;
+          html += '<input type="text" class="pg-input pg-reason-text" value="' + escapeHtml(rt) + '" placeholder="' +
+            (r.mark === '△' ? '内容（例：10時から参加、11時に帰宅）' : 'その他の理由') + '"' + (ro ? ' disabled' : '') + '>';
+        }
+        html += '</div>';
+      }
+      if (ro) {
+        html += '<div class="pg-actions"><span></span><div class="pg-right"><button type="button" class="pg-btn" data-act="close">閉じる</button></div></div>';
+      } else {
+        var memo = draft.memo !== undefined ? draft.memo : r.memo;
+        html += '<textarea class="pg-memo" placeholder="様子・対応">' + escapeHtml(memo) + '</textarea>' +
+          '<div class="pg-actions">' + (r.temp ? '<button type="button" class="pg-btn danger" data-act="remove">この参加者を外す</button>' : '<span></span>') +
+          '<div class="pg-right"><button type="button" class="pg-btn" data-act="close">閉じる</button><button type="button" class="pg-btn primary" data-act="save">保存</button></div></div>';
+      }
+      html += '</div>';
+    }
+    return html + '</div>';
+  }
+
+  function progTypingInList() {
+    var a = document.activeElement;
+    return !!a && el.pgList.contains(a) && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT');
+  }
+
+  function renderProgram(loadFailed) {
+    setSyncStatus();
+    if (appMode !== 'prog') return;
+    var ro = isProgReadonly();
+    var v = progView(), slot = prog.slot, s = v.slots[slot];
+    el.pgReadonly.hidden = !ro;
+    el.pgSlotBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.slot === slot ? 'true' : 'false'); });
+
+    // 枠の情報（決まったら1行に畳む）
+    var infoKey = prog.dateKey + '|' + slot;
+    if (prog.data && prog.infoKey !== infoKey) { prog.infoKey = infoKey; el.pgInfo.open = !s.prog && !ro; }
+    el.pgInfoText.innerHTML = s.prog
+      ? '<b>' + escapeHtml(s.prog) + '</b>　<span class="pg-sub">担当：' + (s.staff.length ? escapeHtml(s.staff.join('・')) : 'なし') + '</span>'
+      : '<span class="pg-empty">プログラム名が未入力です</span>' + (s.staff.length ? '　<span class="pg-sub">担当：' + escapeHtml(s.staff.join('・')) + '</span>' : '');
+    if (document.activeElement !== el.pgProgName) el.pgProgName.value = s.prog;
+    el.pgProgName.disabled = ro;
+    var names = progHistoryNames();
+    if (s.prog && names.indexOf(s.prog) === -1) names.unshift(s.prog);
+    el.pgProgList.innerHTML = names.map(function (n) { return '<option value="' + escapeHtml(n) + '">'; }).join('');
+    var staff = progStaff.slice();
+    s.staff.forEach(function (n) { if (staff.indexOf(n) === -1) staff.push(n); });
+    el.pgStaff.innerHTML = staff.map(function (n) {
+      return '<button type="button" class="pg-chip" data-staff="' + escapeHtml(n) + '" aria-pressed="' + (s.staff.indexOf(n) !== -1) + '"' + (ro ? ' disabled' : '') + '>' + escapeHtml(n) + '</button>';
+    }).join('');
+
+    // 数
+    var list = progNames(v, slot);
+    var c = { '〇': 0, '△': 0, '／': 0, '': 0 };
+    list.forEach(function (n) { var m = progRowOf(v, slot, n).mark; c[m] = (c[m] || 0) + 1; });
+    el.pgSummary.innerHTML = '<span class="pg-tot">' + PROG_SLOT_LABEL[slot] + '　' + list.length + '名</span>' +
+      '<span class="pg-cnt">〇参加 <b>' + c['〇'] + '</b></span><span class="pg-cnt">△遅刻・早退 <b>' + c['△'] + '</b></span>' +
+      '<span class="pg-cnt">／欠席 <b>' + c['／'] + '</b></span><span class="pg-cnt">未記入 <b>' + c[''] + '</b></span>';
+
+    // 振り返り
+    if (document.activeElement !== el.pgReview && !prog.reviewDirty) el.pgReview.value = s.review;
+    el.pgReview.disabled = ro;
+    el.pgReviewWho.textContent = s._pending ? '送信待ち' : (s.by ? '最後に保存：' + s.by + (s.at ? ' ' + s.at : '') : '');
+    el.pgReviewSave.hidden = ro || !prog.reviewDirty;
+
+    // 一覧（入力中は作り直さない。入力が終わったら描き直す）
+    if (progTypingInList()) { prog.listDirty = true; return; }
+    prog.listDirty = false;
+    var html;
+    if (!prog.data && !v.order.length) {
+      html = '<p class="pg-loading">' + (loadFailed ? '読み込めませんでした。電波の良い場所で「↻ 更新」を押してください。' : '読み込み中…') + '</p>';
+    } else {
+      html = list.length ? list.map(function (n) { return progRowHtml(n, progRowOf(v, slot, n), ro); }).join('')
+        : '<p class="pg-empty-list">プログラムの名簿がまだありません。管理者が利用者マスタのB列「プログラム（並び順）」に数字を入れると、ここに並びます。</p>';
+      if (!ro) {
+        var others = targetList.filter(function (t) { return list.indexOf(t) === -1 && !/^\d+[\s　]*$/.test(t); }); // 空き部屋（番号だけ）は出さない
+        if (others.length) {
+          html += '<div class="pg-add"><select id="pgAddSel" aria-label="臨時の参加者"><option value="">＋ 臨時の参加者を追加</option>' +
+            others.map(function (t) { return '<option>' + escapeHtml(t) + '</option>'; }).join('') +
+            '</select><button type="button" class="pg-btn" data-act="add">追加</button></div>';
+        }
+      }
+    }
+    el.pgList.innerHTML = html;
+    Object.keys(prog.flash).forEach(function (k) {
+      var parts = k.split('|');
+      if (parts[0] !== slot) return;
+      var row = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(parts.slice(1).join('|')) + '"]');
+      if (row) {
+        row.classList.add('pg-flash');
+        setTimeout(function () { row.classList.remove('pg-flash'); }, 1400);
+      }
+    });
+    prog.flash = {};
+  }
+
+  /** 「101　舟久保さん」→ 部屋番号と名前に分ける（名簿では名前を大きく出す） */
+  function progSplitName(name) {
+    var m = /^(\d+)[\s　]+(.+)$/.exec(String(name));
+    return m ? { room: m[1], name: m[2] } : { room: '', name: String(name) };
+  }
+
+  function cssEscape(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
+  function progOpenRow(name) {
+    var v = progView();
+    var k = progKey(prog.slot, name);
+    prog.open = name;
+    if (prog.memoBase[k] === undefined) prog.memoBase[k] = progRowOf(v, prog.slot, name).memo;
+  }
+  function progCloseRow(name) {
+    var k = progKey(prog.slot, name);
+    delete prog.drafts[k];
+    delete prog.memoBase[k];
+    if (prog.open === name) prog.open = null;
+  }
+
+  function initProgram() {
+    progLoadStore();
+    el.appLogBtn = document.getElementById('appLogBtn');
+    el.appProgBtn = document.getElementById('appProgBtn');
+    el.pgReadonly = document.getElementById('pgReadonly');
+    el.pgSlotBtns = Array.prototype.slice.call(document.querySelectorAll('.pg-slot-btn'));
+    el.pgInfo = document.getElementById('pgInfo');
+    el.pgInfoText = document.getElementById('pgInfoText');
+    el.pgInfoDone = document.getElementById('pgInfoDone');
+    el.pgProgName = document.getElementById('pgProgName');
+    el.pgProgList = document.getElementById('pgProgList');
+    el.pgStaff = document.getElementById('pgStaff');
+    el.pgSummary = document.getElementById('pgSummary');
+    el.pgList = document.getElementById('pgList');
+    el.pgReview = document.getElementById('pgReview');
+    el.pgReviewWho = document.getElementById('pgReviewWho');
+    el.pgReviewSave = document.getElementById('pgReviewSave');
+    el.pgPrintBtn = document.getElementById('pgPrintBtn');
+
+    el.appLogBtn.addEventListener('click', function () { if (appMode !== 'log') setApp('log', true); });
+    el.appProgBtn.addEventListener('click', function () { if (appMode !== 'prog') setApp('prog', true); });
+    el.pgSlotBtns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (prog.slot === b.dataset.slot) return;
+        prog.slot = b.dataset.slot; prog.open = null; prog.reviewDirty = false; prog.reviewBase = null;
+        renderProgram();
+      });
+    });
+    el.pgInfoDone.addEventListener('click', function () { el.pgInfo.open = false; });
+    el.pgProgName.addEventListener('change', function () {
+      var name = el.pgProgName.value.trim();
+      if (isProgReadonly() || name === progView().slots[prog.slot].prog) return;
+      rememberProgName(name);
+      progEnqueue('slot', { slot: prog.slot, fields: { prog: name } });
+      renderProgram();
+    });
+    el.pgProgName.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el.pgProgName.blur(); } });
+    el.pgStaff.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-staff]');
+      if (!b || isProgReadonly()) return;
+      var cur = progView().slots[prog.slot].staff.slice(), n = b.dataset.staff, i = cur.indexOf(n);
+      if (i === -1) cur.push(n); else cur.splice(i, 1);
+      var order = progStaff.slice();
+      cur.sort(function (a, c) { var x = order.indexOf(a), y = order.indexOf(c); return (x === -1 ? 999 : x) - (y === -1 ? 999 : y); });
+      progEnqueue('slot', { slot: prog.slot, fields: { staff: cur } });
+      renderProgram();
+    });
+
+    // 振り返り：書き始めたときの内容を覚えておき、離れたとき（または保存ボタン）に送る
+    el.pgReview.addEventListener('focus', function () {
+      if (prog.reviewBase === null) prog.reviewBase = progView().slots[prog.slot].review;
+    });
+    el.pgReview.addEventListener('input', function () {
+      prog.reviewDirty = el.pgReview.value !== (prog.reviewBase === null ? '' : prog.reviewBase);
+      el.pgReviewSave.hidden = isProgReadonly() || !prog.reviewDirty;
+      autoGrow(el.pgReview);
+    });
+    var saveReview = function () {
+      if (!prog.reviewDirty || isProgReadonly()) return;
+      var payload = { slot: prog.slot, fields: { review: el.pgReview.value.trim() } };
+      if (prog.reviewBase !== null) payload.reviewBase = prog.reviewBase;
+      prog.reviewDirty = false; prog.reviewBase = null;
+      progEnqueue('slot', payload);
+      renderProgram();
+    };
+    el.pgReview.addEventListener('change', saveReview);
+    el.pgReviewSave.addEventListener('mousedown', function (e) { e.preventDefault(); }); // 押したときに欄から離れて二重に送らない
+    el.pgReviewSave.addEventListener('click', function () { saveReview(); el.pgReview.blur(); showToast('振り返りを保存しました'); });
+    el.pgPrintBtn.addEventListener('click', progPrint);
+
+    // 一覧の操作
+    el.pgList.addEventListener('input', function (e) {
+      var row = e.target.closest('.pg-row'); if (!row) return;
+      var k = progKey(prog.slot, row.dataset.name);
+      var d = prog.drafts[k] || (prog.drafts[k] = {});
+      if (e.target.classList.contains('pg-memo')) { d.memo = e.target.value; autoGrow(e.target); }
+      if (e.target.classList.contains('pg-reason-text')) d.reasonText = e.target.value;
+    });
+    el.pgList.addEventListener('focusout', function () {
+      setTimeout(function () { if (prog.listDirty && !progTypingInList()) renderProgram(); }, 0);
+    });
+    el.pgList.addEventListener('change', function (e) {
+      if (!e.target.classList.contains('pg-reason-text') || isProgReadonly()) return;
+      var row = e.target.closest('.pg-row');
+      var name = row.dataset.name, k = progKey(prog.slot, name);
+      var val = e.target.value.trim();
+      if (val === progRowOf(progView(), prog.slot, name).reasonText) return;
+      if (prog.drafts[k]) delete prog.drafts[k].reasonText;
+      progEnqueue('row', { slot: prog.slot, target: name, fields: { reasonText: val } });
+    });
+    el.pgList.addEventListener('click', function (e) {
+      var ro = isProgReadonly();
+      var act = e.target.closest('[data-act]');
+      if (act && act.dataset.act === 'add') {
+        var sel = document.getElementById('pgAddSel');
+        if (!sel || !sel.value || ro) return;
+        progEnqueue('row', { slot: prog.slot, target: sel.value, fields: {} });
+        showToast(sel.value + 'さんを臨時の参加者に追加しました');
+        renderProgram();
+        return;
+      }
+      var row = e.target.closest('.pg-row');
+      if (!row) return;
+      var name = row.dataset.name, k = progKey(prog.slot, name);
+      var v = progView(), r = progRowOf(v, prog.slot, name);
+
+      if (e.target.closest('.pg-mark')) {
+        if (ro) return;
+        var next = PROG_MARKS[(PROG_MARKS.indexOf(r.mark) + 1) % PROG_MARKS.length];
+        progEnqueue('row', { slot: prog.slot, target: name, fields: { mark: next } });
+        if (prog.drafts[k]) delete prog.drafts[k].reasonText; // 理由は選び直し
+        if (next === '△' || next === '／') progOpenRow(name);
+        else if (prog.open === name && !(prog.drafts[k] && prog.drafts[k].memo !== undefined)) progCloseRow(name);
+        renderProgram();
+        return;
+      }
+      var rc = e.target.closest('[data-reason]');
+      if (rc) {
+        if (ro) return;
+        var reason = r.reason === rc.dataset.reason ? '' : rc.dataset.reason;
+        var fields = { reason: reason };
+        if (!progNeedsText(r.mark, reason)) { fields.reasonText = ''; if (prog.drafts[k]) delete prog.drafts[k].reasonText; }
+        progEnqueue('row', { slot: prog.slot, target: name, fields: fields });
+        renderProgram();
+        var t = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(name) + '"] .pg-reason-text');
+        if (t && reason && !t.value) t.focus();
+        return;
+      }
+      if (act) {
+        if (act.dataset.act === 'save') {
+          var ta = row.querySelector('.pg-memo'), rt = row.querySelector('.pg-reason-text');
+          var f = {};
+          var memo = ta ? ta.value.trim() : r.memo;
+          if (memo !== r.memo) f.memo = memo;
+          if (rt && rt.value.trim() !== r.reasonText) f.reasonText = rt.value.trim();
+          if (Object.keys(f).length) {
+            var payload = { slot: prog.slot, target: name, fields: f };
+            if (f.memo !== undefined && prog.memoBase[k] !== undefined) payload.memoBase = prog.memoBase[k];
+            progEnqueue('row', payload);
+          }
+          progCloseRow(name);
+          if (document.activeElement && el.pgList.contains(document.activeElement)) document.activeElement.blur();
+          renderProgram();
+          return;
+        }
+        if (act.dataset.act === 'close') {
+          var d = prog.drafts[k];
+          if (d && d.memo !== undefined && d.memo.trim() !== r.memo && !window.confirm('書きかけのメモを消して閉じますか？')) return;
+          progCloseRow(name);
+          if (document.activeElement && el.pgList.contains(document.activeElement)) document.activeElement.blur();
+          renderProgram();
+          return;
+        }
+        if (act.dataset.act === 'remove') {
+          if (!window.confirm(name + 'さんを、この枠の臨時の参加者から外しますか？（付けた印やメモも消えます）')) return;
+          progCloseRow(name);
+          progEnqueue('row', { slot: prog.slot, target: name, remove: true });
+          renderProgram();
+          return;
+        }
+      }
+      if (e.target.closest('.pg-body')) {
+        if (ro && !r.memo && !r.reason) return;
+        if (prog.open === name) {
+          var dd = prog.drafts[k];
+          if (dd && dd.memo !== undefined && dd.memo.trim() !== r.memo) return; // 書きかけがあるときは、ボタンで閉じてもらう
+          progCloseRow(name);
+        } else {
+          if (prog.open) {
+            var ok = prog.drafts[progKey(prog.slot, prog.open)];
+            if (!(ok && ok.memo !== undefined)) progCloseRow(prog.open);
+          }
+          progOpenRow(name);
+        }
+        renderProgram();
+        var memoEl = el.pgList.querySelector('.pg-row.open .pg-memo');
+        if (memoEl) { autoGrow(memoEl); if (!r.memo && !(r.mark === '△' || r.mark === '／')) memoEl.focus(); }
+      }
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && appMode === 'prog') { progFlush(); progLoad(false).catch(function () {}); }
+    });
+    window.addEventListener('online', function () { progFlush(); });
+
+    var saved = 'log';
+    try { saved = localStorage.getItem(APP_KEY) || 'log'; } catch (e) { /* 既定は支援記録 */ }
+    if (saved === 'prog') setApp('prog', false);
+  }
+
+  function reiwaLabel(key) {
+    var p = key.split('-').map(Number);
+    var d = new Date(p[0], p[1] - 1, p[2]);
+    var y = p[0] - 2018;
+    return '令和' + (y === 1 ? '元' : y) + '年 ' + p[1] + '月 ' + p[2] + '日（' + '日月火水木金土'.charAt(d.getDay()) + '）';
+  }
+
+  /** 印刷：今の確認表と同じく、上に午前・下に午後 */
+  function progPrint() {
+    var v = progView();
+    var html = ['AM', 'PM'].map(function (slot) {
+      var s = v.slots[slot], names = progNames(v, slot);
+      var recorders = [];
+      names.forEach(function (n) { var b = progRowOf(v, slot, n).by; if (b && recorders.indexOf(b) === -1) recorders.push(b); });
+      if (s.by && recorders.indexOf(s.by) === -1) recorders.push(s.by);
+      var rows = names.map(function (n) {
+        var r = progRowOf(v, slot, n);
+        var reason = '';
+        if (r.mark === '△' || r.mark === '／') {
+          reason = '【' + (r.mark === '△' ? (r.reason || '遅刻・早退') : '欠席' + (r.reason ? '・' + r.reason : '')) +
+            (progNeedsText(r.mark, r.reason) && r.reasonText ? '：' + r.reasonText : '') + '】';
+        }
+        return '<tr><td class="mk">' + r.mark + '</td><td>' + escapeHtml(progSplitName(n).name) + (r.temp ? '（臨時）' : '') + '</td><td>' + escapeHtml(reason + (r.memo || '')) + '</td></tr>';
+      }).join('');
+      return '<section class="pp-sec"><div class="pp-hd"><b>プログラム記録</b><span>' + escapeHtml(reiwaLabel(prog.dateKey)) + '</span></div>' +
+        '<div class="pp-meta"><span>プログラム名：</span><span>' + escapeHtml(s.prog) + '　（' + (slot === 'AM' ? 'ＡＭ' : 'ＰＭ') + '）</span>' +
+        '<span>職員名：</span><span>' + escapeHtml(s.staff.join('・')) + '</span>' +
+        '<span>記録者：</span><span>' + escapeHtml(recorders.join('・')) + '</span></div>' +
+        '<table><colgroup><col style="width:3em"><col style="width:7em"><col></colgroup>' +
+        '<thead><tr><th>出欠</th><th>氏名</th><th>様子・対応</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div class="pp-rv"><b>振り返り（内容・様子など）</b>\n' + escapeHtml(s.review) + '</div></section>';
+    }).join('');
+    el.printView.className = 'pp';
+    el.printView.innerHTML = html;
+    window.print();
   }
 
   init();
