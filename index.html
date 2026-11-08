@@ -386,7 +386,13 @@
   #progView { display: none; }
   body.app-prog #progView { display: block; }
   body.app-prog .layout, body.app-prog #modeTabs, body.app-prog .transcribe-group, body.app-prog .jump-btn { display: none !important; }
-  body.app-prog #dateNav[hidden] { display: flex !important; }
+  /* 「入力へ」は日付の段の右端。絞り込み・印刷では日付の部品だけ隠し、「▲ 条件へ」は残す */
+  .date-nav .today-btn { margin-left: 2px; white-space: nowrap; }
+  /* 「今日へ」も出ていて幅が足りないスマホでは、「入力へ」を記号だけの丸いボタンにする */
+  @media (max-width: 419px) { .date-nav:not(.jump-only) .today-btn:not([hidden]) ~ .jump-btn { width: 2.1rem; height: 2.1rem; padding: 0; font-size: .95rem; } .date-nav:not(.jump-only) .today-btn:not([hidden]) ~ .jump-btn .jump-txt { display: none; } }
+  .date-nav .jump-btn { margin-left: auto; }
+  body:not(.app-prog) .date-nav.jump-only > :not(.jump-btn) { display: none; }
+  @media (min-width: 900px) { body:not(.app-prog) .date-nav.jump-only { display: none; } }
 
   /* ---------- プログラム記録 ---------- */
   .pg-card { margin: 12px 18px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
@@ -538,7 +544,6 @@
         <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true">📝 支援記録</button>
         <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false">✅ プログラム</button>
       </div>
-      <button type="button" class="jump-btn" id="jumpBtn">✎ 入力へ</button>
     </div>
     <div class="date-nav" id="dateNav">
       <button type="button" class="nav-btn" id="prevDayBtn" aria-label="前の日">‹</button>
@@ -548,6 +553,7 @@
       </label>
       <button type="button" class="nav-btn" id="nextDayBtn" aria-label="次の日">›</button>
       <button type="button" class="today-btn" id="todayBtn" hidden>今日へ</button>
+      <button type="button" class="jump-btn" id="jumpBtn" aria-label="入力へ"><span class="jump-ic">✎</span><span class="jump-txt"> 入力へ</span></button>
     </div>
     <div class="status-row">
       <div class="me-row"><span id="meRow">読み込み中…</span><button type="button" class="logout-btn" id="logoutBtn" hidden>ログアウト</button></div>
@@ -728,7 +734,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw78fbll';
+  var APP_BUILD = 'mw7bud4k';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -2839,9 +2845,11 @@
     var isDay = mode === 'day';
     el.modeDayBtn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
     el.modeFilterBtn.setAttribute('aria-pressed', isDay ? 'false' : 'true');
-    el.jumpBtn.textContent = isDay ? '✎ 入力へ' : '▲ 条件へ';
+    el.jumpBtn.querySelector('.jump-ic').textContent = isDay ? '✎' : '▲';
+    el.jumpBtn.querySelector('.jump-txt').textContent = isDay ? ' 入力へ' : ' 条件へ';
+    el.jumpBtn.setAttribute('aria-label', isDay ? '入力へ' : '条件へ');
     setTimeout(updateTopbarHeight, 0); // 日付の段が出たり消えたりして帯の高さが変わる
-    el.dateNav.hidden = !isDay;
+    el.dateNav.classList.toggle('jump-only', !isDay);
     el.composeCard.hidden = !isDay || !me;
     el.filterCard.hidden = isDay;
     el.resultSummary.hidden = isDay || !lastSearch;
@@ -3470,7 +3478,6 @@
     el.appProgBtn.setAttribute('aria-pressed', appMode === 'prog' ? 'true' : 'false');
     if (remember) { try { localStorage.setItem(APP_KEY, appMode); } catch (e) { /* 覚えられなくても動く */ } }
     if (appMode === 'prog') {
-      el.dateNav.hidden = false;
       renderProgram();
       progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
       progFlush();
