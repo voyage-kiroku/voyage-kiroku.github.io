@@ -740,7 +740,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw7ckmkp';
+  var APP_BUILD = 'mw7d98r1';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -3879,6 +3879,32 @@
     el.printView.innerHTML = html;
     window.print();
   }
+
+  // iPhone のダブルタップ拡大を止める（CSS の touch-action が効かない、記録カードの文字の上などのため）。
+  // 0.3秒以内の2回目のタップは拡大の動作だけ打ち消し、ボタンなどへのクリックはこちらで届ける。
+  // 入力欄・選択欄は、文字の選択やカーソル移動を邪魔しないよう対象外にする。二本指の拡大はそのまま使える。
+  (function () {
+    var lastTouchEnd = 0, startX = 0, startY = 0, moved = false;
+    document.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { moved = true; return; } // 二本指（拡大・縮小）は触らない
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY; moved = false;
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (e.touches.length !== 1) { moved = true; return; }
+      if (Math.abs(e.touches[0].clientX - startX) > 10 || Math.abs(e.touches[0].clientY - startY) > 10) moved = true;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+      if (moved) { lastTouchEnd = 0; return; } // スクロールした指は数えない
+      var now = Date.now();
+      var quick = now - lastTouchEnd <= 300;
+      lastTouchEnd = now; // 3回、4回と続けても、毎回拡大を打ち消す
+      if (!quick || e.touches.length > 0 || e.changedTouches.length !== 1) return;
+      var t = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+      if (!t || t.closest('input, textarea, select, [contenteditable="true"], label')) return;
+      e.preventDefault();
+      if (typeof t.click === 'function') t.click();
+    }, { passive: false });
+  })();
 
   init();
 })();
