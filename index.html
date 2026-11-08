@@ -368,6 +368,12 @@
     .compose { margin-top: 10px; }
   }
 
+  /* 「宿直者には非公開」：書くときのチェックと、記録の札 */
+  .hide-night-label { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--muted); margin: 0 0 10px; cursor: pointer; }
+  .hide-night-label input { width: 16px; height: 16px; accent-color: var(--ink); }
+  .hide-night-label:has(input:checked) { color: var(--ink); }
+  .chip-private { background: var(--ink); color: var(--bg); }
+
   /* ログイン画面（アプリ版） */
   .auth-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 18px 32px; }
   .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px 20px 20px; box-shadow: var(--shadow); }
@@ -496,6 +502,7 @@
       <span class="hint">タグ（任意・複数選べます）</span>
       <div class="tag-row" id="tagRow"></div>
     </div>
+    <label class="hide-night-label" id="hideNightLabel" hidden><input type="checkbox" id="hideNightInput"> 🔒 宿直者には非公開</label>
     <div class="compose-actions compose-bottom">
       <div class="photo-row" id="photoRow" hidden>
         <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
@@ -578,7 +585,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw34feay';
+  var APP_BUILD = 'mw73rhv4';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -636,6 +643,8 @@
     submitBtn: document.getElementById('submitBtn'),
     loadingMsg: document.getElementById('loadingMsg'),
     timeline: document.getElementById('timeline'),
+    hideNightLabel: document.getElementById('hideNightLabel'),
+    hideNightInput: document.getElementById('hideNightInput'),
     handoverCard: document.getElementById('handoverCard'),
     handoverTitle: document.getElementById('handoverTitle'),
     handoverShowDone: document.getElementById('handoverShowDone'),
@@ -1041,7 +1050,7 @@
       if (fnName === 'getRecords') return res.records || [];
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
-        return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
+        return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor, staffRole: p.staffRole,
           targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, dateKey: res.dateKey, records: res.records };
       }
       return res;
@@ -1151,7 +1160,8 @@
       me = null; baseRecords = [];
       persistStore();
       el.logoutBtn.hidden = true;
-      showAuth('login');
+      // 前の人の絞り込み結果や申し送りが画面の中に残らないよう、開き直して空の状態からログイン画面を出す
+      location.reload();
     });
   }
 
@@ -1348,7 +1358,7 @@
       return;
     }
 
-    me = { email: data.email, staffName: data.staffName, staffColor: data.staffColor || '' };
+    me = { email: data.email, staffName: data.staffName, staffColor: data.staffColor || '', staffRole: data.staffRole || '' };
     if (data.dateKey === viewDateKey) baseRecords = data.records; // 読み込み中に日付を切り替えた場合は古い日の記録で上書きしない
     persistStore();
 
@@ -1373,10 +1383,14 @@
     }
   }
 
+  /** 自分が宿直者か（宿直者には「宿直者には非公開」のチェックを出さない） */
+  function isNightMe() { return !!me && me.staffRole === '宿直'; }
+
   function showComposer() {
     el.meRow.innerHTML = '対応者：<strong>' + escapeHtml(me.staffName) + '</strong>';
     el.logoutBtn.hidden = false;
     el.composeCard.hidden = viewMode !== 'day';
+    el.hideNightLabel.hidden = isNightMe();
     updateDateUI();
   }
 
@@ -1474,11 +1488,13 @@
         time: time,
         transcribed: false,
         images: composeImages.slice(),
-        tags: sortTags(composeTags)
+        tags: sortTags(composeTags),
+        hideFromNight: !isNightMe() && el.hideNightInput.checked
       }
     };
     composeImages = [];
     composeTags = [];
+    el.hideNightInput.checked = false;
     renderComposeTags();
     if (ENABLE_IMAGES) renderComposeImages();
     queue.push(op);
@@ -1518,13 +1534,14 @@
 
   /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
   /** newImages を渡したときだけ画像も差し替える（Googleログイン版では渡さないので、画像はそのまま） */
-  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags, newDateKey) {
+  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags, newDateKey, hideFromNight) {
     var payload = {
       id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
       base: { time: item.time, target: item.target, content: item.content, tags: item.tags || [] }
     };
     if (newImages) payload.images = newImages;
     if (newTags) payload.tags = newTags;
+    if (hideFromNight !== undefined) payload.hideFromNight = !!hideFromNight;
     var moving = newDateKey && newDateKey !== item.dateKey;
     if (moving) payload.newDateKey = newDateKey;
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
@@ -1534,6 +1551,7 @@
       addOp.payload.content = newContent;
       if (newImages) addOp.payload.images = newImages;
       if (newTags) addOp.payload.tags = newTags;
+      if (hideFromNight !== undefined) addOp.payload.hideFromNight = !!hideFromNight;
     }, 'update', payload);
   }
 
@@ -1856,7 +1874,8 @@
           clientOpId: op.opId, dateKey: op.dateKey,
           target: op.payload.target, content: op.payload.content, time: op.payload.time,
           transcribed: !!op.payload.transcribed,
-          tags: op.payload.tags || []
+          tags: op.payload.tags || [],
+          hideFromNight: !!op.payload.hideFromNight
         };
         if (op.payload.images && op.payload.images.length) body.images = sentImages(op.payload.images);
         return callServer('addRecord', body);
@@ -2035,7 +2054,7 @@
           id: op.tempId, dateKey: op.dateKey, time: op.payload.time,
           staffName: me.staffName, staffColor: me.staffColor || '', staffEmail: me.email,
           target: op.payload.target, content: op.payload.content,
-          transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [], canEdit: true, _pending: true
+          transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [], hideFromNight: !!op.payload.hideFromNight, canEdit: true, _pending: true
         };
       } else if (op.type === 'update' && map[op.id] && op.payload.newDateKey && op.payload.newDateKey !== viewDateKey) {
         delete map[op.id];
@@ -2043,6 +2062,7 @@
         map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
         if (op.payload.images) map[op.id].images = op.payload.images;
         if (op.payload.tags) map[op.id].tags = op.payload.tags;
+        if (op.payload.hideFromNight !== undefined) map[op.id].hideFromNight = !!op.payload.hideFromNight;
       } else if (op.type === 'delete') {
         delete map[op.id];
       } else if (op.type === 'toggle' && map[op.id]) {
@@ -2477,6 +2497,7 @@
             var k = tagColorKey(t);
             return '<span class="chip chip-tag"' + (k ? ' data-color="' + k + '"' : '') + '>' + escapeHtml(t) + '</span>';
           }).join('') +
+          (item.hideFromNight ? '<span class="chip chip-private">🔒 宿直者に非公開</span>' : '') +
           (item.canEdit && !item._pending ? '<span class="chip chip-mine">自分の記録</span>' : '') +
           (item._pending ? '<span class="chip chip-pending">未送信</span>' : '') +
         '</div>' +
@@ -2566,6 +2587,7 @@
       item.content = values.content;
       if (values.images) item.images = values.images;
       if (values.tags) item.tags = values.tags;
+      if (values.hideFromNight !== undefined) item.hideFromNight = values.hideFromNight;
       if (values.dateKey) item.dateKey = values.dateKey;
     }
     renderHandovers();
@@ -2584,6 +2606,7 @@
       item.content = values.content;
       if (values.images) item.images = values.images;
       if (values.tags) item.tags = values.tags;
+      if (values.hideFromNight !== undefined) item.hideFromNight = values.hideFromNight;
       if (values.dateKey) item.dateKey = values.dateKey;
       lastSearch.records.sort(function (a, b) {
         if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
@@ -2905,7 +2928,7 @@
         '<td>' + escapeHtml(r.time) + '</td>' +
         '<td>' + escapeHtml(r.target) + '</td>' +
         '<td>' + escapeHtml(r.staffName) + '</td>' +
-        '<td class="c">' + ((r.tags && r.tags.length) ? escapeHtml('【' + r.tags.join('／') + '】') + '<br>' : '') + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') +
+        '<td class="c">' + (r.hideFromNight ? '【宿直者に非公開】<br>' : '') + ((r.tags && r.tags.length) ? escapeHtml('【' + r.tags.join('／') + '】') + '<br>' : '') + escapeHtml(r.content) + ((r.images && r.images.length) ? '\n（画像' + r.images.length + '枚）' : '') +
           commentsOf(r).map(function (c) { return '\n［コメント］' + escapeHtml(c.name) + '（' + escapeHtml(c.at || '') + '）：' + escapeHtml(c.body); }).join('') + '</td>' +
         '<td class="t">' + (r.transcribed ? '済' : '') + '</td>' +
       '</tr>';
@@ -2940,6 +2963,7 @@
           '<p class="edit-date-note" hidden></p></div>' +
         '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
         '<div class="tag-row edit-tags"></div>' +
+        (isNightMe() ? '' : '<label class="hide-night-label"><input type="checkbox" class="edit-hide-night"' + (item.hideFromNight ? ' checked' : '') + '> 🔒 宿直者には非公開</label>') +
         (ENABLE_IMAGES
           ? '<div class="photo-row edit-photos"><button type="button" class="photo-btn edit-photo-btn">📷 写真を追加</button>' +
             '<input type="file" class="edit-photo-input" accept="image/*" multiple hidden></div>'
@@ -3009,7 +3033,9 @@
       editingId = null;
       if (editImages) values.images = editImages;
       values.tags = sortTags(editTags);
-      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags, newDate); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      var hideBox = card.querySelector('.edit-hide-night');
+      if (hideBox) values.hideFromNight = hideBox.checked;
+      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags, newDate, values.hideFromNight); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
       if (newDate !== originalDate) showToast(dateKeyLabel(newDate) + ' に移しました');
       if (onClose) onClose(true, item, values);
     });
