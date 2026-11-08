@@ -374,6 +374,9 @@
   .hide-night-label:has(input:checked) { color: var(--ink); }
   .chip-private { background: var(--ink); color: var(--bg); }
 
+  /* iPhone で続けてタップしたときの拡大（ダブルタップ拡大）を止める。二本指の拡大はそのまま使える */
+  html { touch-action: manipulation; }
+
   /* ---------- 最上部の切り替え（支援記録 ⇔ プログラム）。画面の名前も兼ねる ---------- */
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0; }
   .app-switch { flex: 1; min-width: 0; max-width: 420px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 14px; background: var(--surface-2); }
@@ -734,7 +737,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw7bud4k';
+  var APP_BUILD = 'mw7c8wd3';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
