@@ -214,6 +214,11 @@
   @media print { .result-pager { display: none !important; } }
   .day-head { margin: 18px 18px 0; padding-bottom: 4px; font-size: .9rem; font-weight: 700; border-bottom: 1px solid var(--line); }
   #results .timeline { margin-top: 10px; }
+  /* 絞り込み：スクロールしても日付（利用者の段のすぐ下）と時刻（カードの左）が見えたままになるように */
+  #results .day-group > .day-head { position: sticky; top: calc(var(--topbar-h, 0px) + var(--pager-h, 0px)); z-index: 9; margin: 0; padding: 8px 18px 6px; background: var(--bg); }
+  #results .day-group { margin-top: 10px; }
+  #results .entry-time { position: sticky; top: calc(var(--topbar-h, 0px) + var(--pager-h, 0px) + 2.2rem); align-self: start; }
+  @media print { #results .day-group > .day-head, #results .entry-time { position: static; } }
   .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
     background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px;
@@ -734,7 +739,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8guewz';
+  var APP_BUILD = 'mw8obn9y';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -2812,6 +2817,8 @@
   /** パソコン表示で左側（入力欄）を上の帯のすぐ下に貼り付けるため、帯の高さを CSS に渡す */
   function updateTopbarHeight() {
     if (el.topbar) document.documentElement.style.setProperty('--topbar-h', el.topbar.offsetHeight + 'px');
+    // 絞り込みの「利用者の段」の高さ（日付の見出しをその下に貼り付けるため）
+    if (el.resultPager) document.documentElement.style.setProperty('--pager-h', (el.resultPager.hidden ? 0 : el.resultPager.offsetHeight) + 'px');
   }
 
   /** 右上のボタン：日ごとの画面では「新しい記録」の欄へ、絞り込みでは条件の欄へ戻る */
@@ -3013,13 +3020,17 @@
     recs.forEach(function (item) {
       if (item.dateKey !== currentDate) {
         currentDate = item.dateKey;
+        // 日付ごとにまとめて囲む（見出しはその日の記録を読んでいる間だけ上に貼り付く）
+        var group = document.createElement('section');
+        group.className = 'day-group';
         var head = document.createElement('h3');
         head.className = 'day-head';
         head.textContent = prefix + dateKeyLabel(currentDate);
-        el.results.appendChild(head);
+        group.appendChild(head);
         list = document.createElement('ul');
         list.className = 'timeline';
-        el.results.appendChild(list);
+        group.appendChild(list);
+        el.results.appendChild(group);
       }
       list.appendChild(buildEntry(item, true));
     });
@@ -3044,6 +3055,7 @@
     appendDateGroups(recs.filter(isPinned), PINNED_TAG + '　');
     appendDateGroups(recs.filter(function (r) { return !isPinned(r); }), '');
     el.results.hidden = false;
+    updateTopbarHeight();
     refreshClamp(el.results);
     el.printBtn.disabled = recs.length === 0;
   }
