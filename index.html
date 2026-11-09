@@ -295,9 +295,13 @@
   /* 転記モード：入力欄を隠し、記録だけを幅400px程度で表示する（福祉見聞録の画面と並べて転記するとき用。端末に記憶） */
   #transcribeBtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
   /* 「小窓で開く」はパソコン（広い画面）だけ。開いた小窓の中では出さない */
-  #popoutBtn { display: none; }
-  @media (min-width: 900px) { #popoutBtn { display: inline-block; } }
-  body.popout #popoutBtn { display: none !important; }
+  .popout-btn, .popout-group { display: none; }
+  @media (min-width: 900px) { .popout-btn { display: inline-block; } .popout-group { display: inline-flex; } }
+  body.popout .popout-btn, body.popout .popout-group { display: none !important; }
+  /* プログラムの並び順・小窓は、プログラムの画面のときだけ */
+  body:not(.app-prog) .prog-tools { display: none !important; }
+  #pgSortKana[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .prog-tools + .prog-tools { margin-right: auto; } /* 並び順と「小窓で開く」を左に寄せ、文字サイズは右端 */
   body.transcribe-mode .shell { max-width: 420px; }
   body.transcribe-mode #composeCard, body.transcribe-mode .jump-btn { display: none !important; }
   body.transcribe-mode .layout { display: block; }
@@ -580,7 +584,14 @@
     </div>
     <div class="mode-tabs transcribe-group" role="group" aria-label="転記モード">
       <button type="button" class="mode-btn" id="transcribeBtn" aria-pressed="false" title="入力欄を隠し、記録だけを細く表示します（福祉見聞録と並べて転記するとき用）">転記モード</button>
-      <button type="button" class="mode-btn" id="popoutBtn" title="福祉見聞録と並べられる細い別ウィンドウで、転記モードを開きます">小窓で開く</button>
+      <button type="button" class="mode-btn popout-btn" id="popoutBtn" title="福祉見聞録と並べられる細い別ウィンドウで、転記モードを開きます">小窓で開く</button>
+    </div>
+    <div class="mode-tabs prog-tools" role="group" aria-label="名前の並び順">
+      <button type="button" class="mode-btn" id="pgSortRoster" aria-pressed="true" title="利用者マスタの並び順（部屋の順）">名簿順</button>
+      <button type="button" class="mode-btn" id="pgSortKana" aria-pressed="false" title="ふりがなの50音順（福祉見聞録と照らし合わせるとき用）">50音順</button>
+    </div>
+    <div class="mode-tabs prog-tools popout-group" role="group" aria-label="小窓">
+      <button type="button" class="mode-btn popout-btn" id="pgPopoutBtn" title="福祉見聞録と並べられる細い別ウィンドウで、プログラム記録を開きます">小窓で開く</button>
     </div>
     <div class="size-row" role="group" aria-label="文字サイズ">
       <span>文字サイズ</span>
@@ -741,7 +752,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8pr6k8';
+  var APP_BUILD = 'mw8qumqg';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -891,7 +902,10 @@
   var POPOUT_WIDTH_KEY = 'srn.popoutWidth'; // 小窓の幅（小窓を手で広げ・縮めたら、次からその幅で開く）
   var POPOUT_DEFAULT_WIDTH = 380;
 
-  function openPopout() {
+  var popoutApp = 'log'; // 小窓で出す画面（'log' 支援記録の転記モード / 'prog' プログラム記録）
+
+  function openPopout(app) {
+    app = app === 'prog' ? 'prog' : 'log';
     var w = POPOUT_DEFAULT_WIDTH;
     try { w = Number(localStorage.getItem(POPOUT_WIDTH_KEY)) || w; } catch (e) { /* 記憶できなくても既定の幅で開く */ }
     w = Math.max(260, Math.min(w, 900));
@@ -899,16 +913,20 @@
     var left = (screen.availLeft || 0) + (screen.availWidth || 1280) - w;
     var top = screen.availTop || 0;
     var isGoogle = typeof google !== 'undefined' && google.script;
-    var url = (isGoogle ? GOOGLE_APP_URL : location.origin + location.pathname) + '?transcribe=1';
-    var win = window.open(url, 'srn-transcribe', 'popup=yes,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
+    var url = (isGoogle ? GOOGLE_APP_URL : location.origin + location.pathname) + '?transcribe=1' + (app === 'prog' ? '&app=prog' : '');
+    // 支援記録とプログラムで別のウィンドウにする（両方を同時に開いておける）
+    var win = window.open(url, app === 'prog' ? 'srn-transcribe-prog' : 'srn-transcribe', 'popup=yes,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
     if (win) win.focus();
     else showError('小窓を開けませんでした。ブラウザのアドレス欄の右に出るポップアップの表示を「許可」にしてから、もう一度押してください。');
   }
 
-  function enterPopout() {
+  function enterPopout(app) {
     isPopout = true;
+    popoutApp = app === 'prog' ? 'prog' : 'log';
     document.body.classList.add('popout');
-    applyTranscribeMode(true);
+    if (popoutApp === 'log') applyTranscribeMode(true);
+    // Googleログイン版はアドレスを後から読むため、画面の準備が済んでいたらここで切り替える
+    if (el.appLogBtn && appMode !== popoutApp) setApp(popoutApp, false);
     // 小窓の幅を変えたら覚えておく（window.open の幅は中身の幅なので innerWidth を記憶する）
     var timer = null;
     window.addEventListener('resize', function () {
@@ -934,14 +952,15 @@
       if (isPopout) return; // 小窓での切り替えは、元のウィンドウの設定に影響させない
       try { localStorage.setItem(TRANSCRIBE_KEY, next ? '1' : '0'); } catch (e) { /* 同上 */ }
     });
-    el.popoutBtn.addEventListener('click', openPopout);
-    // 「?transcribe=1」付きで開かれたら小窓として扱う（Googleログイン版はアドレスの読み方が違う）
+    el.popoutBtn.addEventListener('click', function () { openPopout('log'); });
+    document.getElementById('pgPopoutBtn').addEventListener('click', function () { openPopout('prog'); });
+    // 「?transcribe=1」付きで開かれたら小窓として扱う（「&app=prog」ならプログラム記録。Googleログイン版はアドレスの読み方が違う）
     if (typeof google !== 'undefined' && google.script && google.script.url) {
       google.script.url.getLocation(function (loc) {
-        if (loc && loc.parameter && loc.parameter.transcribe === '1') enterPopout();
+        if (loc && loc.parameter && loc.parameter.transcribe === '1') enterPopout(loc.parameter.app);
       });
     } else if (/[?&]transcribe=1(&|$)/.test(location.search)) {
-      enterPopout();
+      enterPopout((/[?&]app=prog(&|$)/.test(location.search)) ? 'prog' : 'log');
     }
   }
 
@@ -3210,6 +3229,9 @@
   var appMode = 'log';
   var progMembers = [];   // 名簿（利用者マスタ B列の順）
   var progStaff = [];     // 担当職員の選択肢
+  var progKana = {};      // 名前 → ふりがな（利用者マスタ C列。50音順に使う）
+  var PROG_SORT_KEY = 'srn.progSort';    // 名前の並び（'roster' 名簿順 / 'kana' 50音順。この端末に記憶）
+  var progSort = 'roster';
   var progQueue = [];     // 送信待ち [{ opId, kind: 'row' | 'slot', payload }]
   var prog = {
     slot: new Date().getHours() < 12 ? 'AM' : 'PM',
@@ -3231,13 +3253,14 @@
       var s = JSON.parse(localStorage.getItem(PROG_STORE_KEY) || '{}');
       progMembers = s.members || [];
       progStaff = s.staff || [];
+      progKana = s.kana || {};
       progQueue = s.queue || [];
       if (s.dateKey && s.data) { prog.dateKey = s.dateKey; prog.data = s.data; }
     } catch (e) { /* 読めなければ空から */ }
   }
   function progPersist() {
     try {
-      localStorage.setItem(PROG_STORE_KEY, JSON.stringify({ members: progMembers, staff: progStaff, queue: progQueue, dateKey: prog.dateKey, data: prog.data }));
+      localStorage.setItem(PROG_STORE_KEY, JSON.stringify({ members: progMembers, staff: progStaff, kana: progKana, queue: progQueue, dateKey: prog.dateKey, data: prog.data }));
     } catch (e) { /* 容量不足などは無視 */ }
   }
   /** アプリ版で別の職員に切り替わったとき、前の人の送信待ちを引き継がない */
@@ -3303,6 +3326,28 @@
     });
     return names;
   }
+  /**
+   * 「50音順」のときは、ふりがなの順に並べ替える（カタカナで書かれていてもひらがなとして比べる）。
+   * ふりがなが空の人は最後に、名前の順で。印刷は紙と同じ名簿順のまま。
+   */
+  function progSortNames(names) {
+    if (progSort !== 'kana') return names;
+    function yomi(n) {
+      return String(progKana[n] || '').replace(/[\s　]/g, '').replace(/[ァ-ヶ]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0x60); });
+    }
+    return names.map(function (n, i) { return { n: n, y: yomi(n), i: i }; }).sort(function (a, b) {
+      if (!a.y !== !b.y) return a.y ? -1 : 1;
+      return (a.y || b.y ? a.y.localeCompare(b.y, 'ja') : 0) ||
+        progSplitName(a.n).name.localeCompare(progSplitName(b.n).name, 'ja') || a.i - b.i;
+    }).map(function (x) { return x.n; });
+  }
+  function setProgSort(mode, remember) {
+    progSort = mode === 'kana' ? 'kana' : 'roster';
+    el.pgSortRoster.setAttribute('aria-pressed', progSort === 'roster' ? 'true' : 'false');
+    el.pgSortKana.setAttribute('aria-pressed', progSort === 'kana' ? 'true' : 'false');
+    if (remember) { try { localStorage.setItem(PROG_SORT_KEY, progSort); } catch (e) { /* 覚えられなくても動く */ } }
+  }
+
   function progRowOf(v, slot, name) {
     return v.rows[progKey(slot, name)] || { slot: slot, target: name, temp: false, mark: '', reason: '', reasonText: '', memo: '', by: '', at: '' };
   }
@@ -3438,6 +3483,7 @@
     var prev = prog.data;
     if (res.members) progMembers = res.members;
     if (res.staffList) progStaff = res.staffList;
+    if (res.kana) progKana = res.kana;
     if (prev && me) { // 他の職員が変えたマスに色を付ける
       var old = {};
       (prev.rows || []).forEach(function (r) { old[progKey(r.slot, r.target)] = r; });
@@ -3466,7 +3512,7 @@
   // ----- 画面 -----
 
   function setApp(mode, remember) {
-    if (isPopout) mode = 'log'; // 小窓（転記用）は支援記録だけ
+    if (isPopout) mode = popoutApp; // 小窓は開いたときの画面に固定
     appMode = mode === 'prog' ? 'prog' : 'log';
     document.body.classList.toggle('app-prog', appMode === 'prog');
     el.appLogBtn.setAttribute('aria-pressed', appMode === 'log' ? 'true' : 'false');
@@ -3580,7 +3626,7 @@
     }).join('');
 
     // 数
-    var list = progNames(v, slot);
+    var list = progSortNames(progNames(v, slot));
     var c = { '〇': 0, '△': 0, '／': 0, '': 0 };
     list.forEach(function (n) { var m = progRowOf(v, slot, n).mark; c[m] = (c[m] || 0) + 1; });
     el.pgSummary.innerHTML = '<span class="pg-tot">' + PROG_SLOT_LABEL[slot] + '　' + list.length + '名</span>' +
@@ -3659,6 +3705,20 @@
     el.pgReviewWho = document.getElementById('pgReviewWho');
     el.pgReviewSave = document.getElementById('pgReviewSave');
     el.pgPrintBtn = document.getElementById('pgPrintBtn');
+
+    el.pgSortRoster = document.getElementById('pgSortRoster');
+    el.pgSortKana = document.getElementById('pgSortKana');
+    var savedSort = 'roster';
+    try { savedSort = localStorage.getItem(PROG_SORT_KEY) || 'roster'; } catch (e) { /* 既定は名簿順 */ }
+    setProgSort(savedSort, false);
+    [el.pgSortRoster, el.pgSortKana].forEach(function (b) {
+      b.addEventListener('click', function () {
+        var next = b === el.pgSortKana ? 'kana' : 'roster';
+        if (next === progSort) return;
+        setProgSort(next, true);
+        renderProgram();
+      });
+    });
 
     el.appLogBtn.addEventListener('click', function () { if (appMode !== 'log') setApp('log', true); });
     el.appProgBtn.addEventListener('click', function () { if (appMode !== 'prog') setApp('prog', true); });
@@ -3825,6 +3885,7 @@
 
     var saved = 'log';
     try { saved = localStorage.getItem(APP_KEY) || 'log'; } catch (e) { /* 既定は支援記録 */ }
+    if (isPopout) saved = popoutApp; // 小窓は開いたときの画面
     if (saved === 'prog') setApp('prog', false);
   }
 
