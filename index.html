@@ -218,7 +218,9 @@
   #results .day-group > .day-head { position: sticky; top: calc(var(--topbar-h, 0px) + var(--pager-h, 0px)); z-index: 9; margin: 0; padding: 8px 18px 6px; background: var(--bg); }
   #results .day-group { margin-top: 10px; }
   #results .entry-time { position: sticky; top: calc(var(--topbar-h, 0px) + var(--pager-h, 0px) + 2.2rem); align-self: start; }
-  @media print { #results .day-group > .day-head, #results .entry-time { position: static; } }
+  /* 日ごと：長い記録を読んでいる間も、時刻がカードの左上に残る */
+  #timeline .entry-time { position: sticky; top: calc(var(--topbar-h, 0px) + .6rem); align-self: start; }
+  @media print { #results .day-group > .day-head, #results .entry-time, #timeline .entry-time { position: static; } }
   .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
     background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px;
@@ -739,7 +741,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8obn9y';
+  var APP_BUILD = 'mw8pr6k8';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
