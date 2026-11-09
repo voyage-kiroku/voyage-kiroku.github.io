@@ -431,6 +431,14 @@
   .pg-done-row { display: flex; justify-content: flex-end; margin-top: 10px; }
   .pg-summary { position: sticky; top: var(--topbar-h, 0px); z-index: 10; margin: 12px 18px 0; display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; background: var(--bg); padding: 8px 2px; font-size: .84rem; }
   .pg-summary .pg-tot { font-weight: 700; }
+  /* スマホ：まとめの段（上に貼り付く）にも午前・午後の切り替え。パソコンは左の欄が貼り付くので出さない */
+  .pg-sum-slots { display: none; }
+  @media (max-width: 899px) {
+    .pg-sum-slots { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
+    .pg-sum-slot { font-size: .84rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 999px; padding: 5px 14px; }
+    .pg-sum-slot[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+    .pg-tot-slot { display: none; }
+  }
   .pg-summary .pg-cnt { color: var(--muted); white-space: nowrap; }
   .pg-summary .pg-cnt b { color: var(--ink); }
   .pg-list { margin: 4px 18px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
@@ -556,8 +564,8 @@
     <div class="brand-row">
       <h1 class="brand sr-only">ボヤージュ支援記録ノート</h1>
       <div class="app-switch" role="group" aria-label="支援記録とプログラム記録の切り替え">
-        <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true">📝 支援記録</button>
-        <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false">✅ プログラム</button>
+        <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true" title="支援記録（Alt＋1）">📝 支援記録</button>
+        <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false" title="プログラム（Alt＋2）">✅ プログラム</button>
       </div>
     </div>
     <div class="date-nav" id="dateNav">
@@ -758,7 +766,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8znuo2';
+  var APP_BUILD = 'mw9wo50c';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -771,6 +779,8 @@
   var pollTimer = null;
   var flushing = false;
   var editingId = null;   // 編集フォームを開いている記録のID（開いている間は自動更新で画面を作り直さない）
+  var progDateKey = null; // プログラム記録で表示している日付（支援記録の日付とは別。朝MTGで前日を見ても支援記録は今日のまま）
+  var progPickedDate = false; // プログラムの日付を自分で切り替えたか
   var userPickedDate = false; // 利用者が日付を自分で切り替えたか（日付またぎの自動切替の判定用）
   var tempIdMap = {};         // 送信前の仮ID → 登録後の本当のID
   var viewMode = 'day';       // 'day'（日ごと） / 'filter'（絞り込み・印刷）
@@ -1354,6 +1364,7 @@
     var stored = loadStore();
     me = stored.me;
     viewDateKey = localDateKey();
+    progDateKey = viewDateKey;
     baseRecords = (stored.dateKey === viewDateKey) ? stored.baseRecords : [];
     queue = stored.queue || [];
     tempIdMap = stored.tempIdMap || {};
@@ -1387,11 +1398,12 @@
     bindAutoGrow(el.contentInput);
     initImages();
     updateDateUI();
-    el.prevDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, -1), true); });
-    el.nextDayBtn.addEventListener('click', function () { changeViewDate(shiftDateKey(viewDateKey, 1), true); });
-    el.todayBtn.addEventListener('click', function () { changeViewDate(localDateKey(), false); });
+    // 上の日付の段は、今開いている画面（支援記録／プログラム）の日付を動かす
+    el.prevDayBtn.addEventListener('click', function () { changeDate(shiftDateKey(shownDateKey(), -1), true); });
+    el.nextDayBtn.addEventListener('click', function () { changeDate(shiftDateKey(shownDateKey(), 1), true); });
+    el.todayBtn.addEventListener('click', function () { changeDate(localDateKey(), false); });
     el.dateInput.addEventListener('change', function () {
-      if (el.dateInput.value) changeViewDate(el.dateInput.value, true);
+      if (el.dateInput.value) changeDate(el.dateInput.value, true);
     });
 
     el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
@@ -1585,15 +1597,35 @@
   function updateDateUI() {
     var today = localDateKey();
     var isToday = viewDateKey === today;
-    el.datePill.textContent = dateKeyLabel(viewDateKey);
-    el.dateInput.value = viewDateKey;
+    var shown = shownDateKey();
+    el.datePill.textContent = dateKeyLabel(shown);
+    el.dateInput.value = shown;
     el.dateInput.max = today;
-    el.nextDayBtn.disabled = viewDateKey >= today;
-    el.todayBtn.hidden = isToday;
+    el.nextDayBtn.disabled = shown >= today;
+    el.todayBtn.hidden = shown === today;
     el.composeTitle.textContent = isToday ? '新しい記録' : '新しい記録（' + dateKeyLabel(viewDateKey) + ' に追加）';
     el.composeTitle.className = isToday ? '' : 'is-past';
     el.emptyMsg.textContent = isToday ? 'まだ記録がありません。今日最初の記録を書いてみましょう。' : 'この日の記録はありません。';
     renderHandovers();
+  }
+
+  /** 上の日付の段に出す日付（プログラム記録を開いているときはプログラムの日付） */
+  function shownDateKey() { return appMode === 'prog' ? (progDateKey || viewDateKey) : viewDateKey; }
+
+  /** 日付の段の操作：開いている画面の日付だけを変える */
+  function changeDate(key, byUser) {
+    if (appMode === 'prog') changeProgDate(key, byUser); else changeViewDate(key, byUser);
+  }
+
+  /** プログラム記録の日付を切り替える（支援記録の日付は変えない） */
+  function changeProgDate(key, byUser) {
+    var today = localDateKey();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key > today) { updateDateUI(); return; }
+    progPickedDate = !!byUser && key !== today;
+    if (key === progDateKey) { updateDateUI(); return; }
+    progDateKey = key;
+    updateDateUI();
+    if (appMode === 'prog') progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
   }
 
   /** 表示する日付を切り替える（今日より先は選べない）。過去の日も、現在の日と同じように参照・編集・追記できる */
@@ -1603,7 +1635,6 @@
     if (key === viewDateKey) { updateDateUI(); return; }
     userPickedDate = !!byUser && key !== today;
     viewDateKey = key;
-    if (appMode === 'prog') progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
     editingId = null;
     baseRecords = [];
     clearError();
@@ -1627,7 +1658,9 @@
 
   /** 画面を開いたまま日付が変わったとき、自分で日付を選んでいなければ今日に切り替える */
   function rollOverDayIfNeeded() {
-    if (!me || userPickedDate) return;
+    if (!me) return;
+    if (!progPickedDate && progDateKey !== localDateKey()) changeProgDate(localDateKey(), false);
+    if (userPickedDate) return;
     if (viewDateKey !== localDateKey()) changeViewDate(localDateKey(), false);
   }
 
@@ -3500,7 +3533,7 @@
 
   function progLoad(force) {
     if (!me) return Promise.resolve();
-    var key = viewDateKey;
+    var key = progDateKey || viewDateKey;
     if (prog.dateKey !== key) {
       prog.dateKey = key; prog.data = null; prog.rev = ''; prog.open = null; prog.drafts = {}; prog.memoBase = {};
       prog.reviewDirty = false; prog.reviewBase = null; prog.flash = {};
@@ -3562,6 +3595,7 @@
     el.appLogBtn.setAttribute('aria-pressed', appMode === 'log' ? 'true' : 'false');
     el.appProgBtn.setAttribute('aria-pressed', appMode === 'prog' ? 'true' : 'false');
     if (remember) { try { localStorage.setItem(APP_KEY, appMode); } catch (e) { /* 覚えられなくても動く */ } }
+    updateDateUI(); // 日付の段は、開いた画面の日付を出す
     if (appMode === 'prog') {
       renderProgram();
       progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
@@ -3673,7 +3707,9 @@
     var list = progSortNames(progNames(v, slot));
     var c = { '〇': 0, '△': 0, '／': 0, '': 0 };
     list.forEach(function (n) { var m = progRowOf(v, slot, n).mark; c[m] = (c[m] || 0) + 1; });
-    el.pgSummary.innerHTML = '<span class="pg-tot">' + PROG_SLOT_LABEL[slot] + '　' + list.length + '名</span>' +
+    el.pgSummary.innerHTML = '<span class="pg-sum-slots" role="group" aria-label="午前・午後">' +
+      ['AM', 'PM'].map(function (k) { return '<button type="button" class="pg-sum-slot" data-slot="' + k + '" aria-pressed="' + (k === slot) + '">' + PROG_SLOT_LABEL[k] + '</button>'; }).join('') +
+      '</span><span class="pg-tot"><span class="pg-tot-slot">' + PROG_SLOT_LABEL[slot] + '　</span>' + list.length + '名</span>' +
       '<span class="pg-cnt">〇参加 <b>' + c['〇'] + '</b></span><span class="pg-cnt">△遅刻・早退 <b>' + c['△'] + '</b></span>' +
       '<span class="pg-cnt">／欠席 <b>' + c['／'] + '</b></span><span class="pg-cnt">未記入 <b>' + c[''] + '</b></span>';
 
@@ -3718,6 +3754,25 @@
   }
 
   function cssEscape(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
+  /**
+   * 午前・午後を切り替える。画面の一番上に見えている人を覚えておき、切り替えたあとも同じ人を同じ位置に出す
+   * （朝MTGで、人ごとに午前と午後を見比べるため。スクロールし直さなくてよい）
+   */
+  function progSwitchSlot(slot) {
+    if (prog.slot === slot) return;
+    var anchor = null, limit = el.pgSummary.getBoundingClientRect().bottom;
+    var rows = el.pgList.querySelectorAll('.pg-row');
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i].getBoundingClientRect();
+      if (r.bottom > limit + 4) { anchor = { name: rows[i].getAttribute('data-name'), top: r.top }; break; }
+    }
+    prog.slot = slot; prog.open = null; prog.reviewDirty = false; prog.reviewBase = null;
+    renderProgram();
+    if (!anchor) return;
+    var row = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(anchor.name) + '"]');
+    if (row) window.scrollBy(0, row.getBoundingClientRect().top - anchor.top);
+  }
 
   function progOpenRow(name) {
     var v = progView();
@@ -3765,13 +3820,20 @@
     });
 
     el.appLogBtn.addEventListener('click', function () { if (appMode !== 'log') setApp('log', true); });
+    document.addEventListener('keydown', function (e) {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || isPopout || !me) return;
+      var to = (e.code === 'Digit1' || e.code === 'Numpad1') ? 'log' : (e.code === 'Digit2' || e.code === 'Numpad2') ? 'prog' : '';
+      if (!to) return;
+      e.preventDefault();
+      if (appMode !== to) setApp(to, true);
+    });
     el.appProgBtn.addEventListener('click', function () { if (appMode !== 'prog') setApp('prog', true); });
     el.pgSlotBtns.forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (prog.slot === b.dataset.slot) return;
-        prog.slot = b.dataset.slot; prog.open = null; prog.reviewDirty = false; prog.reviewBase = null;
-        renderProgram();
-      });
+      b.addEventListener('click', function () { progSwitchSlot(b.dataset.slot); });
+    });
+    el.pgSummary.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-slot]');
+      if (b) progSwitchSlot(b.dataset.slot);
     });
     el.pgInfoDone.addEventListener('click', function () { el.pgInfo.open = false; });
     el.pgProgName.addEventListener('change', function () {
