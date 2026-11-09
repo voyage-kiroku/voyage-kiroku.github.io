@@ -308,7 +308,9 @@
   body.transcribe-mode .layout-side { position: static; max-height: none; overflow: visible; padding-bottom: 0; }
 
   /* 日ごとの一覧：「朝MTG」の記録を隠す切り替え（端末に記憶） */
-  .day-filter { display: flex; justify-content: flex-end; margin: 14px 18px 0; }
+  .day-filter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 18px 0; }
+  /* 並び順（古い順／新しい順。端末ごとに記憶） */
+  .sort-group { display: inline-flex; gap: 4px; }
   .mini-toggle { font-size: .74rem; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
   .mini-toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
   .layout-main .day-filter + .timeline { margin-top: 8px; }
@@ -720,6 +722,10 @@
   <div class="layout-main">
   <p class="loading" id="loadingMsg">読み込み中…</p>
   <div class="day-filter" id="dayFilterBar" hidden>
+    <div class="sort-group" role="group" aria-label="並び順">
+      <button type="button" class="mini-toggle" id="sortAscBtn" aria-pressed="true">古い順</button>
+      <button type="button" class="mini-toggle" id="sortDescBtn" aria-pressed="false">新しい順</button>
+    </div>
     <button type="button" class="mini-toggle" id="hideMtgBtn" aria-pressed="false"></button>
   </div>
   <ul class="timeline" id="timeline" hidden></ul>
@@ -752,7 +758,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8sw5xi';
+  var APP_BUILD = 'mw8znuo2';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -817,6 +823,8 @@
     handoverList: document.getElementById('handoverList'),
     dayFilterBar: document.getElementById('dayFilterBar'),
     hideMtgBtn: document.getElementById('hideMtgBtn'),
+    sortAscBtn: document.getElementById('sortAscBtn'),
+    sortDescBtn: document.getElementById('sortDescBtn'),
     toTopBtn: document.getElementById('toTopBtn'),
     emptyMsg: document.getElementById('emptyMsg'),
     dateNav: document.getElementById('dateNav'),
@@ -1372,6 +1380,7 @@
     initTranscribeMode();
     initProgram();
     initHideMtg();
+    initSortOrder();
     initHandovers();
     initToTop();
     initTimeMode();
@@ -2256,8 +2265,9 @@
   var hideMtg = false;
   function isMtgRecord(r) { return (r.tags || []).indexOf(MTG_TAG) !== -1; }
   function updateHideMtgButton(count) {
-    // 朝MTGの記録がない日は、隠していないかぎりボタンを出さない
-    el.dayFilterBar.hidden = viewMode !== 'day' || (!hideMtg && count === 0);
+    // 段は並び順のために日ごとでは常に出す。朝MTGのボタンは、朝MTGの記録がない日は隠していないかぎり出さない
+    el.dayFilterBar.hidden = viewMode !== 'day';
+    el.hideMtgBtn.hidden = viewMode !== 'day' || (!hideMtg && count === 0);
     el.hideMtgBtn.setAttribute('aria-pressed', hideMtg ? 'true' : 'false');
     el.hideMtgBtn.textContent = hideMtg
       ? '朝MTGを隠しています（' + count + '件）・表示する'
@@ -2270,6 +2280,29 @@
       try { localStorage.setItem(HIDE_MTG_KEY, hideMtg ? '1' : '0'); } catch (e) { /* 同上 */ }
       render();
     });
+  }
+
+  // ---------- 並び順（古い順／新しい順。日ごと・絞り込みの両方。端末ごとに記憶） ----------
+
+  var SORT_DESC_KEY = 'srn.sortDesc';
+  var sortDesc = false;
+  function updateSortButtons() {
+    el.sortAscBtn.setAttribute('aria-pressed', sortDesc ? 'false' : 'true');
+    el.sortDescBtn.setAttribute('aria-pressed', sortDesc ? 'true' : 'false');
+  }
+  function initSortOrder() {
+    try { sortDesc = localStorage.getItem(SORT_DESC_KEY) === '1'; } catch (e) { /* 記憶できなくても動作に影響なし */ }
+    updateSortButtons();
+    var set = function (desc) {
+      if (sortDesc === desc) return;
+      sortDesc = desc;
+      try { localStorage.setItem(SORT_DESC_KEY, desc ? '1' : '0'); } catch (e) { /* 同上 */ }
+      updateSortButtons();
+      if (viewMode === 'day') render();
+      else if (lastSearch) renderResults();
+    };
+    el.sortAscBtn.addEventListener('click', function () { set(false); });
+    el.sortDescBtn.addEventListener('click', function () { set(true); });
   }
 
   // ---------- 未確認の申し送り（「翌日申し送り」タグ。昨日から7日前まで） ----------
@@ -2627,6 +2660,7 @@
     var mtgCount = records.filter(isMtgRecord).length;
     if (hideMtg) records = records.filter(function (r) { return !isMtgRecord(r); });
     updateHideMtgButton(mtgCount);
+    if (sortDesc) records = records.slice().reverse(); // 新しい順：最新の記録を一番上に
 
     el.timeline.hidden = false;
     el.emptyMsg.hidden = records.length !== 0;
@@ -2880,7 +2914,9 @@
       el.loadingMsg.hidden = true;
       el.timeline.hidden = true;
       el.emptyMsg.hidden = true;
-      el.dayFilterBar.hidden = true;
+      // 絞り込みでは並び順だけを出す（結果があるとき）
+      el.dayFilterBar.hidden = !lastSearch;
+      el.hideMtgBtn.hidden = true;
     }
     renderHandovers();
     window.scrollTo(0, 0);
@@ -3065,6 +3101,9 @@
   function renderResults() {
     renderPager();
     var recs = visibleResults();
+    if (sortDesc) recs = recs.slice().reverse(); // 新しい順：最新の日付・時刻を一番上に（印刷は古い順のまま）
+    el.dayFilterBar.hidden = false;
+    el.hideMtgBtn.hidden = true;
     el.resultSummary.hidden = false;
     if (pagerTarget) {
       el.resultSummary.textContent = recs.length
