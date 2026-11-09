@@ -4,7 +4,7 @@
 // 画面の部品は「保存済みのものをすぐ出し、裏で最新を取り直す」。新しい版は、画面側が version.json と比べて自動で切り替える。
 // 保存の仕組みそのものを変えたときは CACHE の番号を上げる。
 
-var CACHE = 'srn-shell-v1';
+var CACHE = 'srn-shell-v2'; // v2：アドレスの「?…」を除いて保存する（小窓が古い画面で開く不具合の修正）
 var FONT_CACHE = 'srn-fonts';
 var SHELL = [
   './',
@@ -38,11 +38,13 @@ self.addEventListener('fetch', function (event) {
   if (url.origin === self.location.origin && /\/version\.json$/.test(url.pathname)) return; // 版の確認はいつも最新を聞く（保存しない）
 
   if (url.origin === self.location.origin) {
+    // 「?transcribe=1」などの条件は除いたアドレスで保存・検索する（条件ごとに別の古い画面が残らないように）
+    var key = url.origin + url.pathname;
     event.respondWith(
       caches.open(CACHE).then(function (cache) {
-        return cache.match(req, { ignoreSearch: true }).then(function (hit) {
+        return cache.match(key).then(function (hit) {
           var fresh = fetch(req).then(function (res) {
-            if (res && res.ok) cache.put(req, res.clone());
+            if (res && res.ok) cache.put(key, res.clone());
             return res;
           }).catch(function () { return hit; });
           return hit || fresh;

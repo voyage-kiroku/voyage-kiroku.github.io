@@ -752,7 +752,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw8qumqg';
+  var APP_BUILD = 'mw8sw5xi';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -1491,6 +1491,11 @@
       var name = keys.filter(function (k) { return /^srn-shell-/.test(k); })[0];
       if (!name) return;
       return caches.open(name).then(function (cache) {
+        // 「?transcribe=1」など、後ろに条件が付いたアドレスで保存された古い画面を消す（小窓が古い画面のまま開くのを防ぐ）
+        return cache.keys().then(function (reqs) {
+          return Promise.all(reqs.filter(function (r) { return new URL(r.url).search; }).map(function (r) { return cache.delete(r); }));
+        }).then(function () { return cache; });
+      }).then(function (cache) {
         return Promise.all(['./', './index.html'].map(function (u) {
           return fetch(u, { cache: 'no-store' }).then(function (res) { if (res.ok) return cache.put(u, res); });
         }));
