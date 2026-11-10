@@ -766,7 +766,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw9wo50c';
+  var APP_BUILD = 'mw9xjoez';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -3588,9 +3588,28 @@
 
   // ----- 画面 -----
 
+  var appScrollY = { log: 0, prog: 0 }; // 画面ごとのスクロール位置（切り替えて戻ったとき、同じ所から続けられるように）
+
+  /** 切り替えた画面を、前に見ていた位置まで戻す（読み込みで一覧が伸びたら、もう一度合わせる） */
+  function restoreAppScroll(loading) {
+    var y = appScrollY[appMode] || 0, mode = appMode;
+    window.scrollTo(0, y);
+    setTimeout(function () { if (appMode === mode) window.scrollTo(0, y); }, 0);
+    if (loading && y > 0) {
+      var landed = null;
+      setTimeout(function () { landed = window.scrollY; }, 50);
+      loading.then(function () {
+        // まだ届いていない位置で止まっていて、その後に自分でスクロールしていなければ合わせ直す
+        if (appMode === mode && landed !== null && Math.abs(window.scrollY - landed) < 2 && window.scrollY < y) window.scrollTo(0, y);
+      }, function () { /* 読めなくてもそのまま */ });
+    }
+  }
+
   function setApp(mode, remember) {
     if (isPopout) mode = popoutApp; // 小窓は開いたときの画面に固定
-    appMode = mode === 'prog' ? 'prog' : 'log';
+    var next = mode === 'prog' ? 'prog' : 'log';
+    if (next !== appMode) appScrollY[appMode] = window.scrollY;
+    appMode = next;
     document.body.classList.toggle('app-prog', appMode === 'prog');
     el.appLogBtn.setAttribute('aria-pressed', appMode === 'log' ? 'true' : 'false');
     el.appProgBtn.setAttribute('aria-pressed', appMode === 'prog' ? 'true' : 'false');
@@ -3598,14 +3617,16 @@
     updateDateUI(); // 日付の段は、開いた画面の日付を出す
     if (appMode === 'prog') {
       renderProgram();
-      progLoad(true).catch(function () { /* 表示は renderProgram が出す */ });
+      var loading = progLoad(true);
+      loading.catch(function () { /* 表示は renderProgram が出す */ });
       progFlush();
       progStartPolling();
       setTimeout(updateTopbarHeight, 0);
-      window.scrollTo(0, 0);
+      restoreAppScroll(loading);
     } else {
       progStopPolling();
-      setMode(viewMode); // 支援記録の表示（日ごと／絞り込み）を元どおりに
+      setMode(viewMode); // 支援記録の表示（日ごと／絞り込み）を元どおりに（ここで一番上に戻るので、下で位置を戻す）
+      restoreAppScroll(null);
     }
   }
 
