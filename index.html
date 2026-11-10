@@ -589,8 +589,8 @@
 
   <div class="tools-row">
     <div class="mode-tabs" id="modeTabs" role="group" aria-label="表示の切り替え">
-      <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true" title="日ごと（Alt＋3）">日ごと</button>
-      <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false" title="絞り込み・印刷（Alt＋4）">絞り込み・印刷</button>
+      <button type="button" class="mode-btn" id="modeDayBtn" aria-pressed="true" title="日ごと（Alt＋4）">日ごと</button>
+      <button type="button" class="mode-btn" id="modeFilterBtn" aria-pressed="false" title="絞り込み・印刷（Alt＋5）">絞り込み・印刷</button>
     </div>
     <div class="mode-tabs transcribe-group" role="group" aria-label="転記モード">
       <button type="button" class="mode-btn" id="transcribeBtn" aria-pressed="false" title="入力欄を隠し、記録だけを細く表示します（福祉見聞録と並べて転記するとき用）">転記モード</button>
@@ -626,8 +626,8 @@
       <div class="pg-side">
         <div class="pg-card">
           <div class="pg-slots" role="group" aria-label="午前・午後">
-            <button type="button" class="pg-slot-btn" data-slot="AM" aria-pressed="true" title="午前（Alt＋3）">午前 <small>AM</small></button>
-            <button type="button" class="pg-slot-btn" data-slot="PM" aria-pressed="false" title="午後（Alt＋4）">午後 <small>PM</small></button>
+            <button type="button" class="pg-slot-btn" data-slot="AM" aria-pressed="true" title="午前（Alt＋4）">午前 <small>AM</small></button>
+            <button type="button" class="pg-slot-btn" data-slot="PM" aria-pressed="false" title="午後（Alt＋5）">午後 <small>PM</small></button>
           </div>
           <details id="pgInfo">
             <summary class="pg-info-sum"><span class="pg-info-text" id="pgInfoText"></span><span class="pg-info-edit">変更</span></summary>
@@ -766,7 +766,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mw9y2nb4';
+  var APP_BUILD = 'mw9ydk5r';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -3841,22 +3841,33 @@
     });
 
     el.appLogBtn.addEventListener('click', function () { if (appMode !== 'log') setApp('log', true); });
+    var altCharGuard = { pending: false, until: 0 };
+    document.addEventListener('keyup', function (e) {
+      if (e.key === 'Alt' && altCharGuard.pending) altCharGuard.until = Date.now() + 300; // 記号は Alt を離した直後に入る
+    }, true);
+    document.addEventListener('beforeinput', function (e) {
+      if (!altCharGuard.pending) return;
+      if (Date.now() > altCharGuard.until) { altCharGuard.pending = false; return; }
+      if (e.inputType === 'insertText' && e.data && e.data.length <= 2) { e.preventDefault(); altCharGuard.pending = false; }
+    }, true);
     // ショートカット（パソコン）：Alt＋1 支援記録／Alt＋2 プログラム。
-    // Alt＋3・4 は開いている画面の切り替え：支援記録では 日ごと／絞り込み、プログラムでは 午前／午後
+    // Alt＋4・5 は開いている画面の切り替え（テンキーの並び：1・2 の上の段が 4・5）：支援記録では 日ごと／絞り込み、プログラムでは 午前／午後
     document.addEventListener('keydown', function (e) {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || !me) return;
-      var m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code || '');
+      var m = /^(?:Digit|Numpad)([1245])$/.exec(e.code || '');
       if (!m) return;
       var n = Number(m[1]);
       e.preventDefault();
+      // テンキーの Alt＋数字は、Windows では Alt を離した瞬間に記号（◆など）を入力する。その1文字だけ入らないようにする
+      if (/^Numpad/.test(e.code)) { altCharGuard.pending = true; altCharGuard.until = Date.now() + 5000; } // Alt を離したのが分からなくても5秒で解除
       if (n <= 2) {
         if (isPopout) return; // 小窓は開いたときの画面に固定
         var to = n === 1 ? 'log' : 'prog';
         if (appMode !== to) setApp(to, true);
       } else if (appMode === 'prog') {
-        progSwitchSlot(n === 3 ? 'AM' : 'PM');
+        progSwitchSlot(n === 4 ? 'AM' : 'PM');
       } else {
-        var mode = n === 3 ? 'day' : 'filter';
+        var mode = n === 4 ? 'day' : 'filter';
         if (viewMode !== mode) setMode(mode);
       }
     });
