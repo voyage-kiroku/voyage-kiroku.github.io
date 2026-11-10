@@ -481,7 +481,7 @@
   .pg-temp { flex: none; font-size: .66rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
   .pg-who { flex: none; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .pg-who.pg-sending { color: var(--pending); }
-  .pg-inline { flex: none; display: flex; gap: 4px; margin-left: auto; }
+  .pg-inline { flex: none; display: flex; gap: 4px; margin-left: 4px; } /* 名前のすぐ右に並べる */
   .pg-inline .pg-chip { font-size: .76rem; line-height: 1.3; padding: 3px 10px; }
   @media (max-width: 419px) { .pg-inline { gap: 3px; } .pg-inline .pg-chip { font-size: .72rem; padding: 3px 7px; } }
   .pg-preview { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; color: var(--muted); margin-top: 2px; }
@@ -792,7 +792,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwae7u17';
+  var APP_BUILD = 'mwaelt4n';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
