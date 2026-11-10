@@ -474,23 +474,26 @@
   .pg-mark[data-m="／"] { color: var(--muted); }
   .pg-mark:disabled { cursor: default; }
   .pg-body { padding: 9px 12px; min-width: 0; cursor: pointer; }
-  .pg-head { display: flex; align-items: baseline; gap: 8px; }
-  .pg-name { font-weight: 700; font-size: 1rem; }
-  .pg-room { font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .pg-temp { font-size: .66rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
-  .pg-who { margin-left: auto; font-size: .68rem; color: var(--muted); white-space: nowrap; }
+  /* 名前の段は高さを固定（△／で理由のボタンが右に出ても、行の高さが変わらない） */
+  .pg-head { display: flex; align-items: center; gap: 8px; height: 1.75rem; min-width: 0; }
+  .pg-name { font-weight: 700; font-size: 1rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pg-room { flex: none; font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pg-temp { flex: none; font-size: .66rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+  .pg-who { flex: none; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .pg-who.pg-sending { color: var(--pending); }
-  .pg-inline { margin-top: 6px; gap: 5px; }
-  .pg-inline .pg-chip { padding: 5px 12px; }
-  .pg-preview { font-size: .82rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pg-preview.has { color: var(--ink); }
+  .pg-inline { flex: none; display: flex; gap: 4px; margin-left: auto; }
+  .pg-inline .pg-chip { font-size: .76rem; line-height: 1.3; padding: 3px 10px; }
+  @media (max-width: 419px) { .pg-inline { gap: 3px; } .pg-inline .pg-chip { font-size: .72rem; padding: 3px 7px; } }
+  .pg-preview { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; color: var(--muted); margin-top: 2px; }
+  .pg-pv-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pg-preview.has .pg-pv-text { color: var(--ink); }
   .pg-badge { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin-right: 6px; vertical-align: 1px; }
   .pg-badge.late { background: var(--pending-soft); color: var(--pending); }
   .pg-badge.absent { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
   .pg-badge.need { background: var(--danger-soft); color: var(--danger); }
   .pg-edit { grid-column: 1 / -1; padding: 0 12px 12px; display: none; }
   .pg-row.open .pg-edit { display: block; }
-  .pg-row.open .pg-preview { white-space: normal; }
+  .pg-row.open .pg-pv-text { white-space: normal; }
   .pg-reason { margin-bottom: 8px; padding: 10px; border-radius: 12px; background: var(--surface-2); }
   .pg-reason .pg-ttl { font-size: .72rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
   .pg-reason .pg-chips + .pg-input { margin-top: 8px; height: 2.5rem; }
@@ -666,7 +669,7 @@
       <div class="pg-main">
         <div class="pg-summary" id="pgSummary"></div>
         <div class="pg-list" id="pgList"></div>
-        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の下に理由のボタンが出るので、あとから選べます（遅刻・早退・その他は内容を書く欄が開きます）。名前のところをタップすると、様子・対応を書けます。</p>
+        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の右に理由のボタンが出るので、あとから選べます（遅刻・早退・その他は内容を書く欄が開きます）。名前のところをタップすると、様子・対応を書けます。</p>
         <div class="pg-card">
           <div class="pg-review-head"><label class="hint" for="pgReview">振り返り（内容・様子など）</label><span class="pg-review-who" id="pgReviewWho"></span></div>
           <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
@@ -789,7 +792,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwaagd9q';
+  var APP_BUILD = 'mwae7u17';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -3771,9 +3774,9 @@
   /** 閉じた行で、△／の理由を後から選べるボタン（選んだものは色が付く） */
   function progInlineReasonsHtml(r) {
     if (r.mark !== '△' && r.mark !== '／') return '';
-    return '<div class="pg-chips pg-inline">' + PROG_REASONS[r.mark].map(function (x) {
+    return '<span class="pg-inline">' + PROG_REASONS[r.mark].map(function (x) {
       return '<button type="button" class="pg-chip" data-reason="' + x + '" aria-pressed="' + (r.reason === x) + '">' + x + '</button>';
-    }).join('') + '</div>';
+    }).join('') + '</span>';
   }
 
   function progBadgeHtml(r, open) {
@@ -3794,10 +3797,9 @@
       '<button type="button" class="pg-mark" data-m="' + r.mark + '" aria-label="' + escapeHtml(progSplitName(name).name) + 'の出欠：' + (r.mark || '未記入') + '">' + r.mark + '</button>' +
       '<div class="pg-body"><div class="pg-head">' + (progSplitName(name).room ? '<span class="pg-room">' + escapeHtml(progSplitName(name).room) + '</span>' : '') + '<span class="pg-name">' + escapeHtml(progSplitName(name).name) + '</span>' +
       (r.temp ? '<span class="pg-temp">臨時</span>' : '') +
-      '<span class="' + whoCls + '">' + who + '</span></div>' +
-      (open ? '' : progInlineReasonsHtml(r)) +
-      '<div class="pg-preview' + (r.memo ? ' has' : '') + '">' + progBadgeHtml(r, open) +
-      (r.memo ? escapeHtml(r.memo) : '＋ 様子・対応を書く') + '</div></div>';
+      (open ? '' : progInlineReasonsHtml(r)) + '</div>' + // 理由のボタンは名前と同じ段の右側（行の高さを変えない）
+      '<div class="pg-preview' + (r.memo ? ' has' : '') + '"><span class="pg-pv-text">' + progBadgeHtml(r, open) +
+      (r.memo ? escapeHtml(r.memo) : '＋ 様子・対応を書く') + '</span><span class="' + whoCls + '">' + who + '</span></div></div>';
     if (open) {
       html += '<div class="pg-edit">';
       var base = prog.memoBase[k];
