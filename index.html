@@ -50,6 +50,27 @@
   .date-label { position: relative; display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
   .date-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: none; padding: 0; }
   .date-pill { font-size: .85rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  /* パソコン：日付をクリックするとカレンダーを出す（スマホは端末の日付選択のまま） */
+  .date-label.cal-mode { cursor: pointer; }
+  .date-label.cal-mode:hover { border-color: var(--accent); }
+  .date-label.cal-mode input { pointer-events: none; }
+  .cal-pop { position: fixed; z-index: 60; width: 17rem; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 10px 10px 12px; --cal-sat: #3a6ea5; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cal-pop { --cal-sat: #8fb3e0; } }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .cal-title { font-weight: 700; font-size: .95rem; }
+  .cal-nav { width: 2rem; height: 2rem; border-radius: 50%; background: var(--surface-2); color: var(--ink); font-size: 1.15rem; line-height: 1; padding: 0; }
+  .cal-nav:disabled { opacity: .35; cursor: default; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-wd { font-size: .72rem; font-weight: 700; color: var(--muted); text-align: center; padding: 2px 0 4px; }
+  .cal-day { height: 2.1rem; border-radius: 8px; background: transparent; color: var(--ink); font-size: .88rem; padding: 0; }
+  .cal-wd.sun, .cal-day.sun { color: var(--danger); }
+  .cal-wd.sat, .cal-day.sat { color: var(--cal-sat); }
+  .cal-day:hover:not(:disabled) { background: var(--surface-2); }
+  .cal-day.today { box-shadow: inset 0 0 0 2px var(--accent); font-weight: 700; }
+  .cal-day[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .cal-day:disabled { opacity: .3; cursor: default; }
+  .cal-foot { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+  .cal-foot button { font-size: .78rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 5px 13px; }
   .tools-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 18px 0; }
   .topbar .tools-row { margin: 10px 0 0; }
   .mode-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
@@ -572,7 +593,7 @@
     </div>
     <div class="date-nav" id="dateNav">
       <button type="button" class="nav-btn" id="prevDayBtn" aria-label="前の日">‹</button>
-      <label class="date-label">
+      <label class="date-label" title="クリックでカレンダー">
         <span class="date-pill" id="datePill"></span>
         <input type="date" id="dateInput" aria-label="表示する日付を選ぶ">
       </label>
@@ -768,7 +789,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwa2v7xn';
+  var APP_BUILD = 'mwaagd9q';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -1407,6 +1428,7 @@
     el.dateInput.addEventListener('change', function () {
       if (el.dateInput.value) changeDate(el.dateInput.value, true);
     });
+    initCalendar();
 
     el.modeDayBtn.addEventListener('click', function () { setMode('day'); });
     el.modeFilterBtn.addEventListener('click', function () { setMode('filter'); });
@@ -1600,6 +1622,7 @@
     var today = localDateKey();
     var isToday = viewDateKey === today;
     var shown = shownDateKey();
+    closeCal(); // 開いたままのカレンダーが前の日付を出し続けないように
     el.datePill.textContent = dateKeyLabel(shown);
     el.dateInput.value = shown;
     el.dateInput.max = today;
@@ -1609,6 +1632,109 @@
     el.composeTitle.className = isToday ? '' : 'is-past';
     el.emptyMsg.textContent = isToday ? 'まだ記録がありません。今日最初の記録を書いてみましょう。' : 'この日の記録はありません。';
     renderHandovers();
+  }
+
+  /*
+   * パソコン用のカレンダー。日付をクリックすると開き、日を選ぶとその日へ移る。
+   * スマホ・タブレット（指で操作する端末）は、これまでどおり端末の日付選択を使う。
+   * Googleログイン版は画面が枠の中で動くため、ブラウザの日付選択を開く命令が使えず、自前で出す。
+   */
+  var calPop = null, calMonth = '';
+  function calEnabled() { return !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches); }
+  function calShiftMonth(ym, d) {
+    var x = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + d, 1);
+    return x.getFullYear() + '-' + pad2(x.getMonth() + 1);
+  }
+  function initCalendar() {
+    var label = el.dateInput.parentNode;
+    function sync() { label.classList.toggle('cal-mode', calEnabled()); if (!calEnabled()) closeCal(); }
+    calPop = document.createElement('div');
+    calPop.className = 'cal-pop';
+    calPop.hidden = true;
+    calPop.setAttribute('role', 'dialog');
+    calPop.setAttribute('aria-label', '日付を選ぶ');
+    document.body.appendChild(calPop);
+    sync();
+    label.addEventListener('click', function (e) {
+      if (!label.classList.contains('cal-mode')) return;
+      e.preventDefault();
+      if (calPop.hidden) openCal(); else closeCal();
+    });
+    // キーボード：日付の欄で Enter を押してもカレンダーを開く
+    el.dateInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && label.classList.contains('cal-mode')) { e.preventDefault(); openCal(); }
+    });
+    calPop.addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b || b.disabled) return;
+      var today = localDateKey();
+      if (b.dataset.day) { closeCal(); changeDate(b.dataset.day, b.dataset.day !== today); return; }
+      var act = b.dataset.cal;
+      if (act === 'prev' || act === 'next') { calMonth = calShiftMonth(calMonth, act === 'prev' ? -1 : 1); renderCal(); return; }
+      if (act === 'today') { closeCal(); changeDate(today, false); return; }
+      if (act === 'yday') { closeCal(); changeDate(shiftDateKey(today, -1), true); }
+    });
+    // 矢印キーで日を動かす（←→ 1日、↑↓ 1週間）。Esc で閉じる
+    calPop.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); closeCal(); el.dateInput.focus(); return; }
+      var key = e.target.dataset && e.target.dataset.day;
+      var delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+      if (!key || !delta || e.altKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var next = shiftDateKey(key, delta);
+      if (next > localDateKey()) return;
+      if (next.slice(0, 7) !== calMonth) { calMonth = next.slice(0, 7); renderCal(); }
+      var nb = calPop.querySelector('[data-day="' + next + '"]');
+      if (nb) nb.focus();
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (!calPop.hidden && !calPop.contains(e.target) && !label.contains(e.target)) closeCal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !calPop.hidden) closeCal();
+    });
+    window.addEventListener('resize', function () { sync(); if (!calPop.hidden) placeCal(); });
+  }
+  function openCal() {
+    var shown = shownDateKey();
+    calMonth = shown.slice(0, 7);
+    renderCal();
+    calPop.hidden = false;
+    placeCal();
+    var b = calPop.querySelector('[data-day="' + shown + '"]');
+    if (b) b.focus();
+  }
+  function closeCal() { if (calPop) calPop.hidden = true; }
+  function placeCal() {
+    var r = el.dateInput.parentNode.getBoundingClientRect();
+    var w = calPop.offsetWidth;
+    calPop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    calPop.style.top = (r.bottom + 6) + 'px';
+  }
+  function renderCal() {
+    var today = localDateKey(), sel = shownDateKey();
+    var y = Number(calMonth.slice(0, 4)), m = Number(calMonth.slice(5, 7));
+    var first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate();
+    var html = '<div class="cal-head">' +
+      '<button type="button" class="cal-nav" data-cal="prev" aria-label="前の月">‹</button>' +
+      '<span class="cal-title">' + y + '年' + m + '月</span>' +
+      '<button type="button" class="cal-nav" data-cal="next" aria-label="次の月"' + (calMonth >= today.slice(0, 7) ? ' disabled' : '') + '>›</button>' +
+      '</div><div class="cal-grid" role="grid">';
+    html += '日月火水木金土'.split('').map(function (w, i) {
+      return '<span class="cal-wd' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + w + '</span>';
+    }).join('');
+    for (var i = 0; i < first; i++) html += '<span></span>';
+    for (var d = 1; d <= days; d++) {
+      var key = calMonth + '-' + pad2(d), wd = (first + d - 1) % 7;
+      html += '<button type="button" class="cal-day' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '') + (key === today ? ' today' : '') + '"' +
+        ' data-day="' + key + '" aria-label="' + escapeHtml(dateKeyLabel(key)) + '" aria-selected="' + (key === sel) + '"' +
+        ' tabindex="' + (key === sel ? '0' : '-1') + '"' + (key > today ? ' disabled' : '') + '>' + d + '</button>';
+    }
+    html += '</div><div class="cal-foot">' +
+      '<button type="button" data-cal="yday">昨日</button>' +
+      '<button type="button" data-cal="today">今日</button></div>';
+    calPop.innerHTML = html;
   }
 
   /** 上の日付の段に出す日付（プログラム記録を開いているときはプログラムの日付） */
