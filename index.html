@@ -97,6 +97,15 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   .compose { margin: 16px 18px 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 14px 12px; box-shadow: var(--shadow); }
   .compose h2 { margin: 0 0 10px; font-size: .95rem; font-weight: 700; color: var(--muted); }
+  /* 書きかけの自動保存：戻したときのお知らせと、保存した時刻 */
+  .draft-note { margin: 0 0 10px; padding: 9px 11px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-soft-ink); font-size: .78rem; line-height: 1.6; }
+  .draft-note p { margin: 0; }
+  .draft-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .draft-actions button { font-size: .74rem; font-weight: 700; border-radius: 999px; padding: 4px 11px; background: var(--surface); color: var(--accent-soft-ink); border: 1px solid var(--line); }
+  .draft-actions .draft-discard { color: var(--danger); }
+  .content-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .content-head label.hint { margin-bottom: 4px; }
+  .draft-saved { font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .field-row { display: grid; grid-template-columns: minmax(0, 1fr) 6.75rem; gap: 8px; margin-bottom: 8px; }
   .field-row > div { min-width: 0; }
   label.hint { display: block; font-size: .7rem; color: var(--muted); margin-bottom: 4px; }
@@ -686,6 +695,7 @@
   <div class="layout-side">
   <div class="compose" id="composeCard" hidden>
     <h2 id="composeTitle">新しい記録</h2>
+    <div class="draft-note" id="draftNote" role="status" hidden></div>
     <div class="field-row">
       <div>
         <label class="hint" for="targetSelect">対象者（利用者）</label>
@@ -700,7 +710,10 @@
         <button type="button" class="link-btn" id="timeModeBtn">直接入力に切替</button>
       </div>
     </div>
-    <label class="hint" for="contentInput">内容</label>
+    <div class="content-head">
+      <label class="hint" for="contentInput">内容</label>
+      <span class="draft-saved" id="draftSaved" hidden></span>
+    </div>
     <textarea id="contentInput" placeholder="例）居室にて体温測定 36.4℃。食欲あり、昼食は全量摂取。"></textarea>
     <div id="tagBox" hidden>
       <span class="hint">タグ（任意・複数選べます）</span>
@@ -792,7 +805,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwaelt4n';
+  var APP_BUILD = 'mwbjobxc';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -849,6 +862,8 @@
     targetSelect: document.getElementById('targetSelect'),
     timeInput: document.getElementById('timeInput'),
     contentInput: document.getElementById('contentInput'),
+    draftNote: document.getElementById('draftNote'),
+    draftSaved: document.getElementById('draftSaved'),
     submitBtn: document.getElementById('submitBtn'),
     loadingMsg: document.getElementById('loadingMsg'),
     timeline: document.getElementById('timeline'),
@@ -1370,7 +1385,14 @@
         showError('まだ送信されていない記録があります。「同期済み」になってからログアウトしてください。');
         return;
       }
-      if (!confirm('ログアウトしますか？（次に使うときは、職員IDと暗証番号の入力が必要です）')) return;
+      // 書きかけの記録は、共用の端末に残さないようログアウトで消す（先に確認する）
+      var hasDraft = !!(el.contentInput.value.trim() || composeImages.length);
+      if (!confirm(hasDraft
+        ? '書きかけの記録があります。ログアウトすると、書きかけは消えます。\nログアウトしますか？'
+        : 'ログアウトしますか？（次に使うときは、職員IDと暗証番号の入力が必要です）')) return;
+      forgetLocalImages(composeImages);
+      composeImages = [];
+      clearComposeDraft();
       var old = token;
       token = null;
       saveToken(null);
@@ -1422,6 +1444,7 @@
     initToTop();
     initTimeMode();
     bindAutoGrow(el.contentInput);
+    initComposeDraft();
     initImages();
     updateDateUI();
     // 上の日付の段は、今開いている画面（支援記録／プログラム）の日付を動かす
@@ -1618,6 +1641,7 @@
     el.logoutBtn.hidden = false;
     el.composeCard.hidden = viewMode !== 'day';
     updateDateUI();
+    restoreComposeDraft();
   }
 
   /** 日付表示・前後ボタン・入力欄の見出しを、表示中の日付に合わせる */
@@ -1853,6 +1877,7 @@
     el.contentInput.value = '';
     autoGrow(el.contentInput);
     el.timeInput.value = nowHHMM();
+    clearComposeDraft();
 
     render();
     flushQueue();
@@ -1925,6 +1950,143 @@
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
       addOp.payload.transcribed = checked;
     }, 'toggle', { id: item.id, dateKey: item.dateKey, value: checked });
+  }
+
+  // ---------- 書きかけの自動保存 ----------
+  // 「記録する」を押す前の内容（対象者・時刻・内容・タグ・写真）を、入力のたびに端末へ保存する。
+  // 画面を閉じた・再読み込みした・ログインが切れた などで画面が消えても、次に開いたときに戻す。
+  // 同じ端末を複数の職員が使っても混ざらないよう、職員（メールアドレス）ごとに分けて保存する。小窓は別に持つ。
+  var DRAFT_KEY_PREFIX = 'srn.draft.v1:';
+  var draftTimer = null;
+  var draftRestoredFor = null;  // 書きかけを戻し終えた職員（戻す前に空の内容で上書きしないため）
+  var draftTargetWanted = null; // 対象者の一覧がまだ無いときに、あとで選び直す対象者
+
+  function draftKey() {
+    if (!me || !me.email) return null;
+    return DRAFT_KEY_PREFIX + String(me.email).toLowerCase() + (isPopout ? ':popout' : '');
+  }
+  function readComposeDraft() {
+    var k = draftKey();
+    if (!k) return null;
+    try {
+      var d = JSON.parse(localStorage.getItem(k) || 'null');
+      return d && typeof d === 'object' ? d : null;
+    } catch (e) { return null; }
+  }
+  function draftHHMM(ms) { var d = new Date(ms); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function showDraftSaved(ms) {
+    el.draftSaved.hidden = !ms;
+    el.draftSaved.textContent = ms ? '✓ 書きかけを自動保存 ' + draftHHMM(ms) : '';
+  }
+  function saveComposeDraftNow() {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    var k = draftKey();
+    if (!k || draftRestoredFor !== me.email) return;
+    var content = el.contentInput.value;
+    var images = composeImages.filter(function (x) { return x && x.cid; }).map(function (x) { return { cid: x.cid }; });
+    try {
+      if (!content.trim() && !images.length) { localStorage.removeItem(k); showDraftSaved(null); return; }
+      var d = {
+        dateKey: viewDateKey, target: el.targetSelect.value, time: readTimeInput(el.timeInput) || '',
+        content: content, tags: composeTags.slice(), images: images, savedAt: Date.now()
+      };
+      localStorage.setItem(k, JSON.stringify(d));
+      showDraftSaved(d.savedAt);
+    } catch (e) { /* 保存できなくても入力はそのまま続けられる */ }
+  }
+  function scheduleDraftSave() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveComposeDraftNow, 500);
+  }
+  function clearComposeDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    var k = draftKey();
+    if (k) { try { localStorage.removeItem(k); } catch (e) { /* 無視 */ } }
+    draftTargetWanted = null;
+    showDraftSaved(null);
+    el.draftNote.hidden = true;
+  }
+
+  /** 書きかけがあれば入力欄に戻し、お知らせを出す（職員ごとに1回だけ） */
+  function restoreComposeDraft() {
+    if (!me || draftRestoredFor === me.email) return;
+    draftRestoredFor = me.email;
+    var d = readComposeDraft();
+    if (!d || (!String(d.content || '').trim() && !(d.images || []).length)) return;
+    if (el.contentInput.value.trim() || composeImages.length) return; // いま書いている内容は上書きしない
+    el.contentInput.value = String(d.content || '');
+    autoGrow(el.contentInput);
+    if (d.time) el.timeInput.value = timeMode === 'text' ? d.time.replace(':', '') : d.time;
+    if (d.target) {
+      el.targetSelect.value = d.target;
+      if (el.targetSelect.value !== d.target) draftTargetWanted = d.target;
+    }
+    composeTags = Array.isArray(d.tags) ? d.tags.slice() : [];
+    renderComposeTags();
+    if (ENABLE_IMAGES && (d.images || []).length) {
+      // 写真は端末に一時保存されているものだけ戻す
+      Promise.all(d.images.map(function (x) {
+        return idbGet(x.cid).then(function (o) { return o ? { cid: x.cid } : null; });
+      })).then(function (list) {
+        list.forEach(function (x) { if (x) composeImages.push(x); });
+        renderComposeImages();
+      });
+    }
+    showDraftNote(d);
+    showDraftSaved(d.savedAt);
+  }
+
+  function showDraftNote(d) {
+    var when = new Date(d.savedAt || Date.now());
+    var whenTxt = (when.getMonth() + 1) + '/' + when.getDate() + ' ' + draftHHMM(when.getTime());
+    var other = d.dateKey && d.dateKey !== viewDateKey && d.dateKey <= localDateKey();
+    var html = '<p>保存していなかった書きかけを戻しました（' + escapeHtml(whenTxt) + ' まで入力していた内容）。</p>';
+    if (other) html += '<p>' + escapeHtml(dateKeyLabel(d.dateKey)) + ' の記録として書いていたものです。</p>';
+    html += '<div class="draft-actions">' +
+      (other ? '<button type="button" class="draft-go" data-day="' + escapeHtml(d.dateKey) + '">' + escapeHtml(dateKeyLabel(d.dateKey)) + ' に切り替える</button>' : '') +
+      '<button type="button" class="draft-ok">このまま続ける</button>' +
+      '<button type="button" class="draft-discard">書きかけを消す</button></div>';
+    el.draftNote.innerHTML = html;
+    el.draftNote.hidden = false;
+  }
+
+  function initComposeDraft() {
+    el.contentInput.addEventListener('input', scheduleDraftSave);
+    el.targetSelect.addEventListener('change', function () { draftTargetWanted = null; scheduleDraftSave(); });
+    el.timeInput.addEventListener('input', scheduleDraftSave);
+    el.timeInput.addEventListener('change', scheduleDraftSave);
+    el.nowBtn.addEventListener('click', scheduleDraftSave);
+    el.tagRow.addEventListener('click', function (e) { if (e.target.closest('.tag-btn')) scheduleDraftSave(); });
+    // 画面を閉じる・別のアプリに切り替える直前は、待たずに保存する
+    window.addEventListener('pagehide', function () { if (draftTimer) saveComposeDraftNow(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden' && draftTimer) saveComposeDraftNow();
+    });
+    el.draftNote.addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      if (b.classList.contains('draft-go')) {
+        el.draftNote.hidden = true;
+        if (appMode !== 'log') setApp('log', true);
+        changeViewDate(b.dataset.day, true);
+        scheduleDraftSave();
+      } else if (b.classList.contains('draft-ok')) {
+        el.draftNote.hidden = true;
+      } else if (b.classList.contains('draft-discard')) {
+        if (!confirm('書きかけの内容を消しますか？（元に戻せません）')) return;
+        el.contentInput.value = '';
+        autoGrow(el.contentInput);
+        el.timeInput.value = nowHHMM();
+        composeTags = [];
+        renderComposeTags();
+        forgetLocalImages(composeImages);
+        composeImages = [];
+        if (ENABLE_IMAGES) renderComposeImages();
+        clearComposeDraft();
+      }
+    });
   }
 
   // ---------- 画像（アプリ版） ----------
@@ -2171,7 +2333,8 @@
   }
 
   function renderComposeImages() {
-    renderImageList(el.photoRow, el.photoBtn, composeImages, function (removed) { idbDelete(removed.cid); });
+    renderImageList(el.photoRow, el.photoBtn, composeImages, function (removed) { idbDelete(removed.cid); scheduleDraftSave(); });
+    scheduleDraftSave();
   }
 
   function initImages() {
@@ -2381,6 +2544,7 @@
 
   function populateSelect(select, options, keepValue) {
     var prev = keepValue ? select.value : null;
+    if (select === el.targetSelect && draftTargetWanted) prev = draftTargetWanted;
     select.innerHTML = '';
     options.forEach(function (opt) {
       var o = document.createElement('option');
