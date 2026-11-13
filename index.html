@@ -613,13 +613,13 @@
       </div>
     </div>
     <div class="date-nav" id="dateNav">
-      <button type="button" class="nav-btn" id="prevDayBtn" aria-label="前の日">‹</button>
+      <button type="button" class="nav-btn" id="prevDayBtn" aria-label="前の日" title="前の日（Alt＋←）">‹</button>
       <label class="date-label" title="クリックでカレンダー">
         <span class="date-pill" id="datePill"></span>
         <input type="date" id="dateInput" aria-label="表示する日付を選ぶ">
       </label>
-      <button type="button" class="nav-btn" id="nextDayBtn" aria-label="次の日">›</button>
-      <button type="button" class="today-btn" id="todayBtn" hidden>今日へ</button>
+      <button type="button" class="nav-btn" id="nextDayBtn" aria-label="次の日" title="次の日（Alt＋→）">›</button>
+      <button type="button" class="today-btn" id="todayBtn" title="今日へ（Alt＋0）" hidden>今日へ</button>
       <button type="button" class="jump-btn" id="jumpBtn" aria-label="入力へ"><span class="jump-ic">✎</span><span class="jump-txt"> 入力へ</span></button>
     </div>
     <div class="status-row">
@@ -818,7 +818,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwe87u5p';
+  var APP_BUILD = 'mwe8cswf';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -4292,6 +4292,20 @@
     // Alt＋4・5 は開いている画面の切り替え（テンキーの並び：1・2 の上の段が 4・5）：支援記録では 日ごと／絞り込み、プログラムでは 午前／午後
     document.addEventListener('keydown', function (e) {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || !me) return;
+      // Alt＋← 前の日／Alt＋→ 次の日／Alt＋0 今日へ（開いている画面の日付。支援記録とプログラムは別々に動く）
+      // ブラウザの「戻る」（Alt＋←）より先に受け取って止める
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        var db = e.key === 'ArrowLeft' ? el.prevDayBtn : el.nextDayBtn;
+        if (!db.disabled) db.click();
+        return;
+      }
+      if (e.code === 'Digit0' || e.code === 'Numpad0') {
+        e.preventDefault();
+        if (e.code === 'Numpad0') { altCharGuard.pending = true; altCharGuard.until = Date.now() + 5000; }
+        if (!el.todayBtn.hidden) el.todayBtn.click();
+        return;
+      }
       if (e.code === 'KeyM') { // Alt＋M：朝MTGモードの切り替え（支援記録の画面）
         if (appMode !== 'log' || !mtgTagAvailable()) return;
         e.preventDefault();
