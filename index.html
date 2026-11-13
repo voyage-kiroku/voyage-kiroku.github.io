@@ -97,6 +97,12 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   .compose { margin: 16px 18px 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 14px 12px; box-shadow: var(--shadow); }
   .compose h2 { margin: 0 0 10px; font-size: .95rem; font-weight: 700; color: var(--muted); }
+  /* 朝MTGモード：見出しの右のスイッチ。オンの間は入力欄の縁に色を付ける */
+  .compose-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+  .compose .compose-head h2 { margin: 0; }
+  .mtg-mode-btn { flex: none; white-space: nowrap; }
+  .compose.mtg-on { border: 2px solid var(--accent); padding: 13px 13px 11px; }
+  .compose.mtg-on .compose-head h2 { color: var(--accent); }
   /* 書きかけの自動保存：戻したときのお知らせと、保存した時刻 */
   .draft-note { margin: 0 0 10px; padding: 9px 11px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-soft-ink); font-size: .78rem; line-height: 1.6; }
   .draft-note p { margin: 0; }
@@ -464,12 +470,15 @@
   .pg-summary { position: sticky; top: var(--topbar-h, 0px); z-index: 10; margin: 12px 18px 0; display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; background: var(--bg); padding: 8px 2px; font-size: .84rem; }
   .pg-summary .pg-tot { font-weight: 700; }
   /* スマホ：まとめの段（上に貼り付く）にも午前・午後の切り替え。パソコンは左の欄が貼り付くので出さない */
-  .pg-sum-slots { display: none; }
+  .pg-sum-slots, .pg-sum-prog, .pg-sum-break { display: none; }
   @media (max-width: 899px) {
     .pg-sum-slots { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); }
     .pg-sum-slot { font-size: .84rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 999px; padding: 5px 14px; }
     .pg-sum-slot[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
     .pg-tot-slot { display: none; }
+    .pg-sum-prog { display: block; flex: 1 1 0; min-width: 0; text-align: left; font-size: .95rem; font-weight: 700; color: var(--ink); background: transparent; padding: 4px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pg-sum-prog.empty { color: var(--pending); font-size: .84rem; }
+    .pg-sum-break { display: block; flex-basis: 100%; height: 0; } /* 数は次の行へ */
   }
   .pg-summary .pg-cnt { color: var(--muted); white-space: nowrap; }
   .pg-summary .pg-cnt b { color: var(--ink); }
@@ -694,7 +703,11 @@
   <div class="layout">
   <div class="layout-side">
   <div class="compose" id="composeCard" hidden>
-    <h2 id="composeTitle">新しい記録</h2>
+    <div class="compose-head">
+      <h2 id="composeTitle">新しい記録</h2>
+      <button type="button" class="mini-toggle mtg-mode-btn" id="mtgModeBtn" aria-pressed="false" hidden
+        title="オンの間は、記録に「朝MTG」のタグが自動で付きます。8:30〜9:30 は自動でオン、9:30 に自動でオフ（Alt＋M）">☀ 朝MTG</button>
+    </div>
     <div class="draft-note" id="draftNote" role="status" hidden></div>
     <div class="field-row">
       <div>
@@ -805,7 +818,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwbjobxc';
+  var APP_BUILD = 'mwe84xoo';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -841,6 +854,7 @@
     nextDayBtn: document.getElementById('nextDayBtn'),
     todayBtn: document.getElementById('todayBtn'),
     composeTitle: document.getElementById('composeTitle'),
+    mtgModeBtn: document.getElementById('mtgModeBtn'),
     meRow: document.getElementById('meRow'),
     logoutBtn: document.getElementById('logoutBtn'),
     shell: document.querySelector('.shell'),
@@ -1439,6 +1453,7 @@
     initTranscribeMode();
     initProgram();
     initHideMtg();
+    initMtgMode();
     initSortOrder();
     initHandovers();
     initToTop();
@@ -1868,7 +1883,7 @@
       }
     };
     composeImages = [];
-    composeTags = [];
+    composeTags = (mtgMode.on && mtgTagAvailable()) ? [MTG_TAG] : []; // 朝MTGモード中は次の記録にもタグを付けておく
     renderComposeTags();
     if (ENABLE_IMAGES) renderComposeImages();
     queue.push(op);
@@ -2538,6 +2553,8 @@
   function renderComposeTags() {
     el.tagBox.hidden = tagList.length === 0;
     renderTagButtons(el.tagRow, composeTags);
+    updateMtgModeUI();
+    if (me && !mtgFirstCheck && mtgTagAvailable()) { mtgFirstCheck = true; setTimeout(checkMtgMode, 0); }
   }
 
   // ---------- 表示 ----------
@@ -2608,6 +2625,86 @@
       try { localStorage.setItem(HIDE_MTG_KEY, hideMtg ? '1' : '0'); } catch (e) { /* 同上 */ }
       render();
     });
+  }
+
+  // ---------- 朝MTGモード ----------
+  // オンの間は、新しい記録に「朝MTG」のタグが最初から付き、記録したあとも付いたまま（1件ずつ外すこともできる）。
+  // 8:30〜9:30 に開いていると1日1回だけ自動でオンになり、9:30 に自動でオフに戻る（切り忘れ防止）。
+  // 9:30 を過ぎてから自分でオンにしたときは1時間でオフ。端末ごとに記憶し、小窓とも同じ状態にする。
+  var MTG_MODE_KEY = 'srn.mtgMode';
+  var MTG_AUTO_START = 8 * 60 + 30, MTG_AUTO_END = 9 * 60 + 30; // 自動でオンにする時間帯（分）
+  var mtgMode = { on: false, until: 0, autoDay: '' }; // autoDay：自動でオンにした日（同じ日に2回は入れない）
+  var mtgFirstCheck = false;
+
+  function mtgTagAvailable() { return tagList.indexOf(MTG_TAG) !== -1; }
+  function mtgEndToday() { var d = new Date(); d.setHours(Math.floor(MTG_AUTO_END / 60), MTG_AUTO_END % 60, 0, 0); return d.getTime(); }
+  function loadMtgMode() {
+    try {
+      var x = JSON.parse(localStorage.getItem(MTG_MODE_KEY) || 'null');
+      if (x && typeof x === 'object') mtgMode = { on: !!x.on, until: Number(x.until) || 0, autoDay: String(x.autoDay || '') };
+    } catch (e) { /* 記憶できなくても動作に影響なし */ }
+  }
+  function saveMtgMode() {
+    try { localStorage.setItem(MTG_MODE_KEY, JSON.stringify(mtgMode)); } catch (e) { /* 同上 */ }
+  }
+  /** 入力中の記録のタグを、朝MTGモードに合わせる */
+  function applyMtgTag(on) {
+    var i = composeTags.indexOf(MTG_TAG);
+    if (on && i === -1) composeTags.push(MTG_TAG);
+    if (!on && i !== -1) composeTags.splice(i, 1);
+  }
+  function setMtgMode(on, byUser) {
+    var now = Date.now();
+    mtgMode.on = !!on;
+    if (on) {
+      var end = mtgEndToday();
+      mtgMode.until = now < end ? end : now + 60 * 60 * 1000;
+    } else {
+      mtgMode.until = 0;
+    }
+    if (byUser) mtgMode.autoDay = localDateKey(); // 自分で切り替えた日は、もう自動では入れない
+    saveMtgMode();
+    applyMtgTag(mtgMode.on);
+    renderComposeTags();
+    scheduleDraftSave();
+  }
+  function updateMtgModeUI() {
+    var avail = mtgTagAvailable();
+    var on = avail && mtgMode.on;
+    el.mtgModeBtn.hidden = !avail;
+    el.mtgModeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    el.mtgModeBtn.textContent = on ? '☀ 朝MTG中（〜' + draftHHMM(mtgMode.until) + '）' : '☀ 朝MTG';
+    el.composeCard.classList.toggle('mtg-on', on);
+  }
+  /** 時刻を見て、自動でオン・オフする（30秒ごと・画面に戻ったとき） */
+  function checkMtgMode() {
+    if (!me || !mtgTagAvailable()) return;
+    if (mtgMode.on && Date.now() >= mtgMode.until) {
+      setMtgMode(false, false);
+      showToast('朝MTGモードを終わりました');
+      return;
+    }
+    var d = new Date(), mins = d.getHours() * 60 + d.getMinutes(), today = localDateKey();
+    if (!mtgMode.on && mins >= MTG_AUTO_START && mins < MTG_AUTO_END && mtgMode.autoDay !== today) {
+      mtgMode.autoDay = today;
+      setMtgMode(true, false);
+      showToast('朝MTGモードにしました（〜' + draftHHMM(mtgMode.until) + '）');
+    }
+  }
+  function initMtgMode() {
+    loadMtgMode();
+    el.mtgModeBtn.addEventListener('click', function () { setMtgMode(!mtgMode.on, true); });
+    setInterval(checkMtgMode, 30000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkMtgMode(); });
+    // 小窓など、別のウィンドウで切り替えたときも合わせる
+    window.addEventListener('storage', function (e) {
+      if (e.key !== MTG_MODE_KEY) return;
+      var was = mtgMode.on;
+      loadMtgMode();
+      if (was !== mtgMode.on) applyMtgTag(mtgMode.on);
+      renderComposeTags();
+    });
+    updateMtgModeUI();
   }
 
   // ---------- 並び順（古い順／新しい順。日ごと・絞り込みの両方。端末ごとに記憶） ----------
@@ -4024,7 +4121,11 @@
     list.forEach(function (n) { var m = progRowOf(v, slot, n).mark; c[m] = (c[m] || 0) + 1; });
     el.pgSummary.innerHTML = '<span class="pg-sum-slots" role="group" aria-label="午前・午後">' +
       ['AM', 'PM'].map(function (k) { return '<button type="button" class="pg-sum-slot" data-slot="' + k + '" aria-pressed="' + (k === slot) + '">' + PROG_SLOT_LABEL[k] + '</button>'; }).join('') +
-      '</span><span class="pg-tot"><span class="pg-tot-slot">' + PROG_SLOT_LABEL[slot] + '　</span>' + list.length + '名</span>' +
+      '</span>' +
+      // スマホ：午前・午後の切り替えの右にプログラム名（スクロールしても見える。タップで名前・担当を変える欄を開く）
+      '<button type="button" class="pg-sum-prog' + (s.prog ? '' : ' empty') + '" title="プログラム名・担当職員を変える">' + (s.prog ? escapeHtml(s.prog) : 'プログラム名 未入力') + '</button>' +
+      '<span class="pg-sum-break"></span>' +
+      '<span class="pg-tot"><span class="pg-tot-slot">' + PROG_SLOT_LABEL[slot] + '　</span>' + list.length + '名</span>' +
       '<span class="pg-cnt">〇参加 <b>' + c['〇'] + '</b></span><span class="pg-cnt">△遅刻・早退 <b>' + c['△'] + '</b></span>' +
       '<span class="pg-cnt">／欠席 <b>' + c['／'] + '</b></span><span class="pg-cnt">未記入 <b>' + c[''] + '</b></span>';
 
@@ -4191,6 +4292,13 @@
     // Alt＋4・5 は開いている画面の切り替え（テンキーの並び：1・2 の上の段が 4・5）：支援記録では 日ごと／絞り込み、プログラムでは 午前／午後
     document.addEventListener('keydown', function (e) {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || !me) return;
+      if (e.code === 'KeyM') { // Alt＋M：朝MTGモードの切り替え（支援記録の画面）
+        if (appMode !== 'log' || !mtgTagAvailable()) return;
+        e.preventDefault();
+        setMtgMode(!mtgMode.on, true);
+        showToast(mtgMode.on ? '朝MTGモード：オン（〜' + draftHHMM(mtgMode.until) + '）' : '朝MTGモード：オフ');
+        return;
+      }
       var m = /^(?:Digit|Numpad)([1245])$/.exec(e.code || '');
       if (!m) return;
       var n = Number(m[1]);
@@ -4214,7 +4322,11 @@
     });
     el.pgSummary.addEventListener('click', function (e) {
       var b = e.target.closest('[data-slot]');
-      if (b) progSwitchSlot(b.dataset.slot);
+      if (b) { progSwitchSlot(b.dataset.slot); return; }
+      if (e.target.closest('.pg-sum-prog')) { // プログラム名をタップ：名前・担当の欄を開いて、そこまで戻る
+        el.pgInfo.open = true;
+        el.pgInfo.closest('.pg-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     });
     el.pgInfoDone.addEventListener('click', function () { el.pgInfo.open = false; });
     el.pgProgName.addEventListener('change', function () {
