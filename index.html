@@ -818,7 +818,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwe8cswf';
+  var APP_BUILD = 'mwea7h5u';
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -1477,6 +1477,13 @@
     el.refreshBtn.addEventListener('click', manualRefresh);
     placeToolsRow();
     window.addEventListener('resize', placeToolsRow);
+    // 上の帯の高さが変わったら（送信中の表示で段が折り返したときなど）、貼り付く段の位置もすぐ合わせる。
+    // 合わせないと、帯が元の高さに戻ったあとも下の段が低い位置に残り、すき間ができる
+    if (window.ResizeObserver && el.topbar) {
+      var topbarRo = new ResizeObserver(function () { updateTopbarHeight(); });
+      topbarRo.observe(el.topbar);
+      if (el.resultPager) topbarRo.observe(el.resultPager);
+    }
     el.searchBtn.addEventListener('click', doSearch);
     el.conflictCopyBtn.addEventListener('click', function () { copyText(conflictText); });
     el.conflictCloseBtn.addEventListener('click', function () { el.conflictBanner.hidden = true; });
@@ -2498,8 +2505,9 @@
       el.syncPillText.textContent = 'オフライン・保存待ち ' + pendingCount + '件';
     } else {
       el.syncPill.className = 'sync-pill pending';
-      el.syncPillText.textContent = '送信中… 残り' + pendingCount + '件';
+      el.syncPillText.textContent = '送信中 ' + pendingCount + '件'; // 短くして、スマホで段が折り返さないように
     }
+    if (!window.ResizeObserver) updateTopbarHeight(); // 古い端末では、表示を変えるたびに帯の高さを測り直す
   }
 
   // ---------- タグ ----------
