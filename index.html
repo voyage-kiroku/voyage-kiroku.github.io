@@ -252,6 +252,7 @@
   .export-result { margin-top: 12px; font-size: .8rem; line-height: 1.6; }
   .export-sum { margin: 0 0 8px; font-weight: 700; color: var(--good); }
   .export-sum.none { color: var(--muted); }
+  .export-mtg { margin: 0 0 8px; color: var(--muted); font-size: .8rem; }
   .export-warn { background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 8px 11px; margin: 0 0 10px; }
   .export-warn p { margin: 0 0 4px; }
   .export-warn ul { margin: 0; padding-left: 1.2em; }
@@ -857,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwipu1dv';
+  var APP_BUILD = 'mwj20euq';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -3492,6 +3493,9 @@
     var html = res.count
       ? '<p class="export-sum">✓ ' + res.count + '件を書き出しました（' + escapeHtml(res.fileName || '') + '）</p>'
       : '<p class="export-sum none">書き出す記録はありませんでした。</p>';
+    if (res.mtgExcluded !== undefined) {
+      html += '<p class="export-mtg">朝MTGの記録を' + (res.mtgExcluded || 0) + '件除外しました</p>';
+    }
     if (skipped.length) {
       html += '<div class="export-warn"><p><strong>⚠ CSVに入れなかった記録が ' + skipped.length + '件あります。</strong>' +
         '直せるものは直してから、もう一度書き出してください。</p><ul>' +
