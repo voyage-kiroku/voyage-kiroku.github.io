@@ -858,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwj20euq';
+  var APP_BUILD = 'mwjwp64z';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4505,6 +4505,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.ctrlKey === e.altKey || e.metaKey || e.shiftKey || e.isComposing || !me) return; // Alt か Ctrl のどちらか一方だけ
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (/^Numpad/.test(e.code || '')) return; // Num Lock オフのテンキー2・8も ↓↑ になるが、テンキーは数字として扱う（Alt＋2 はプログラムへ）
       var a = document.activeElement, typing = a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT' || a.isContentEditable);
       // Alt は入力欄の中でも使える（選択欄は Alt＋↓ で開くのでそのまま）。Ctrl は入力欄の中では文字の移動に残す
       if (a && a.tagName === 'SELECT') return;
@@ -4517,7 +4518,8 @@
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || !me) return;
       // Alt＋← 前の日／Alt＋→ 次の日／Alt＋0 今日へ（開いている画面の日付。支援記録とプログラムは別々に動く）
       // ブラウザの「戻る」（Alt＋←）より先に受け取って止める
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      // Num Lock オフのテンキー4・6も ←→ になるが、テンキーは Num Lock に関係なく数字として扱う（Alt＋テンキー4 は午前など）
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !/^Numpad/.test(e.code || '')) {
         e.preventDefault();
         var db = e.key === 'ArrowLeft' ? el.prevDayBtn : el.nextDayBtn;
         if (!db.disabled) db.click();
