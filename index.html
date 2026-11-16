@@ -729,7 +729,7 @@
     <div class="field-row">
       <div>
         <label class="hint" for="targetSelect">対象者（利用者）</label>
-        <select id="targetSelect"></select>
+        <select id="targetSelect" title="Alt＋．で次の人、Alt＋，で前の人（名簿順）"></select>
       </div>
       <div>
         <div class="time-head">
@@ -858,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjwp64z';
+  var APP_BUILD = 'mwjx66o6';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4398,6 +4398,29 @@
    * 午前・午後を切り替える。画面の一番上に見えている人を覚えておき、切り替えたあとも同じ人を同じ位置に出す
    * （朝MTGで、人ごとに午前と午後を見比べるため。スクロールし直さなくてよい）
    */
+  /**
+   * 入力欄の「対象者」を1人ずつ送る（dir: 1 次／-1 前）。並びは選択肢のまま（名簿順）。空室は飛ばし、端では止まる。
+   * 書きかけ（内容・写真）があるときは、別の人の記録になってしまわないよう切り替えない。
+   */
+  function stepTarget(dir) {
+    var sel = el.targetSelect, n = sel.options.length;
+    if (!n || sel.disabled || !sel.offsetParent) return;
+    if (el.contentInput.value.trim() || composeImages.length) {
+      showToast('書きかけの内容があります。記録するか消してから、対象者を切り替えてください');
+      return;
+    }
+    var i = sel.selectedIndex + dir;
+    while (i >= 0 && i < n && /^[0-9０-９]+[\s　]*$/.test(sel.options[i].value)) i += dir; // 空室（部屋番号だけの行）は飛ばす
+    if (i < 0 || i >= n) { showToast(dir > 0 ? '名簿の最後の人です' : '名簿の最初の人です'); return; }
+    sel.selectedIndex = i;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    sel.classList.add('jump-flash');
+    clearTimeout(stepTarget.timer);
+    stepTarget.timer = setTimeout(function () { sel.classList.remove('jump-flash'); }, 700);
+    showToast('対象者：' + sel.value);
+    if (document.activeElement !== el.contentInput) el.contentInput.focus(); // すぐ書き始められるように
+  }
+
   function progSwitchSlot(slot) {
     if (prog.slot === slot) return;
     var anchor = null, limit = el.pgSummary.getBoundingClientRect().bottom;
@@ -4536,6 +4559,13 @@
         e.preventDefault();
         setMtgMode(!mtgMode.on, true);
         showToast(mtgMode.on ? '朝MTGモード：オン（〜' + draftHHMM(mtgMode.until) + '）' : '朝MTGモード：オフ');
+        return;
+      }
+      // Alt＋．次の人／Alt＋，前の人：入力欄の「対象者」を名簿順（選択肢の並び）で切り替える（朝MTG用。支援記録の画面）
+      if (e.code === 'Period' || e.code === 'Comma') {
+        if (appMode !== 'log') return;
+        e.preventDefault();
+        stepTarget(e.code === 'Period' ? 1 : -1);
         return;
       }
       var m = /^(?:Digit|Numpad)([1245])$/.exec(e.code || '');
