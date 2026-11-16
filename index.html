@@ -186,6 +186,9 @@
   /* タグ（記録の分類）。付いているときだけ札の並びに出す */
   .chip-tag { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 600; }
   .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  /* 福祉見聞録のケース項目（大項目／中項目）。既定（日常生活／日中の様子）以外のときだけ札を出す */
+  .case-box select { margin-bottom: 10px; }
+  .chip-case { background: var(--surface-2); color: var(--ink); border: 1px dashed var(--muted); }
   .tag-btn { font-size: .76rem; font-weight: 700; padding: 6px 11px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
   .tag-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   /* タグマスタで「枠の色」を選んだタグ：札・選択ボタン・記録の枠をその色にする */
@@ -243,6 +246,19 @@
   .btn-secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 700; padding: 10px 18px; border-radius: 999px; }
   .btn-secondary:disabled, .btn-primary:disabled { opacity: .45; cursor: default; }
   .filter-note { font-size: .7rem; color: var(--muted); margin: 0 0 4px; }
+  /* 福祉見聞録へのCSV書き出し（アプリ版・指定した職員だけ） */
+  .export-card { margin-top: 14px; }
+  .export-lead { font-size: .74rem; color: var(--muted); line-height: 1.6; margin: 0 0 10px; }
+  .export-result { margin-top: 12px; font-size: .8rem; line-height: 1.6; }
+  .export-sum { margin: 0 0 8px; font-weight: 700; color: var(--good); }
+  .export-sum.none { color: var(--muted); }
+  .export-warn { background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 8px 11px; margin: 0 0 10px; }
+  .export-warn p { margin: 0 0 4px; }
+  .export-warn ul { margin: 0; padding-left: 1.2em; }
+  .export-warn li { margin: 3px 0; }
+  .export-warn .why { display: block; font-size: .74rem; }
+  .export-note { margin: 0 0 6px; color: var(--muted); font-size: .74rem; }
+  @media print { .export-card { display: none !important; } }
   .result-summary { margin: 14px 18px 0; font-size: .82rem; color: var(--muted); }
   /* 利用者ごとにめくる（朝の申し送り用）。スクロールしても上に残る */
   .result-pager { position: sticky; z-index: 10; display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 8px 18px; background: var(--bg); border-bottom: 1px solid var(--line); }
@@ -732,6 +748,10 @@
       <span class="hint">タグ（任意・複数選べます）</span>
       <div class="tag-row" id="tagRow"></div>
     </div>
+    <div class="case-box">
+      <label class="hint" for="caseSelect">福祉見聞録のケース項目</label>
+      <select id="caseSelect"></select>
+    </div>
     <div class="compose-actions compose-bottom">
       <div class="photo-row" id="photoRow" hidden>
         <button type="button" class="photo-btn" id="photoBtn">📷 写真を追加</button>
@@ -778,6 +798,25 @@
       <button type="button" class="btn-primary" id="searchBtn">検索</button>
     </div>
   </div>
+  <div class="compose filter-card export-card" id="exportCard" hidden>
+    <h2>福祉見聞録へのCSV書き出し</h2>
+    <p class="export-lead">自動転記（AutoHotkey）が読み込むファイルを作ります。書き出しただけでは「転記済み」になりません。転記を確かめてから、下に出るボタンで付けてください。</p>
+    <div class="filter-grid">
+      <div>
+        <label class="hint" for="xFrom">開始日</label>
+        <input type="date" id="xFrom">
+      </div>
+      <div>
+        <label class="hint" for="xTo">終了日</label>
+        <input type="date" id="xTo">
+      </div>
+    </div>
+    <label class="check-label"><input type="checkbox" id="xUntranscribed" checked> 未転記の記録だけ</label>
+    <div class="compose-actions">
+      <button type="button" class="btn-primary" id="exportBtn">CSVを書き出す</button>
+    </div>
+    <div class="export-result" id="exportResult" role="status" hidden></div>
+  </div>
   </div>
   <div class="layout-main">
   <p class="loading" id="loadingMsg">読み込み中…</p>
@@ -818,7 +857,8 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwea7h5u';
+  var APP_BUILD = 'mwipu1dv';
+  var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
   var THUMB_SIDE = 320;          // 一覧用の縮小画像の長い辺（px）
@@ -899,6 +939,13 @@
     transcribeBtn: document.getElementById('transcribeBtn'),
     popoutBtn: document.getElementById('popoutBtn'),
     filterCard: document.getElementById('filterCard'),
+    caseSelect: document.getElementById('caseSelect'),
+    exportCard: document.getElementById('exportCard'),
+    xFrom: document.getElementById('xFrom'),
+    xTo: document.getElementById('xTo'),
+    xUntranscribed: document.getElementById('xUntranscribed'),
+    exportBtn: document.getElementById('exportBtn'),
+    exportResult: document.getElementById('exportResult'),
     fFrom: document.getElementById('fFrom'),
     fTo: document.getElementById('fTo'),
     fTarget: document.getElementById('fTarget'),
@@ -1217,7 +1264,7 @@
   }
   function persistStore() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList, tagColors: tagColors }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList, tagColors: tagColors, caseItems: caseItems, canExportCsv: canExportCsv }));
     } catch (e) { /* 容量不足・プライベートモード等は無視 */ }
   }
 
@@ -1281,7 +1328,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot', exportKenbunCsv: 'exportKenbunCsv', markTranscribedBulk: 'markTranscribedBulk'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -1297,7 +1344,7 @@
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
         return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
-          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, programMembers: res.programMembers, programStaff: res.programStaff, dateKey: res.dateKey, records: res.records };
+          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, programMembers: res.programMembers, programStaff: res.programStaff, caseItems: res.caseItems, canExportCsv: res.canExportCsv, dateKey: res.dateKey, records: res.records };
       }
       return res;
     });
@@ -1435,6 +1482,8 @@
     staffNameList = stored.staffNames || [];
     tagList = stored.tags || [];
     tagColors = stored.tagColors || {};
+    canExportCsv = ENABLE_CSV_EXPORT && !!stored.canExportCsv;
+    setCaseItems(stored.caseItems);
     if (targetList.length) populateSelect(el.targetSelect, targetList, true);
     renderComposeTags();
     if (!el.timeInput.value) el.timeInput.value = nowHHMM();
@@ -1461,6 +1510,7 @@
     bindAutoGrow(el.contentInput);
     initComposeDraft();
     initImages();
+    initExport();
     updateDateUI();
     // 上の日付の段は、今開いている画面（支援記録／プログラム）の日付を動かす
     el.prevDayBtn.addEventListener('click', function () { changeDate(shiftDateKey(shownDateKey(), -1), true); });
@@ -1643,6 +1693,9 @@
     tagList = data.tags || [];
     tagColors = data.tagColors || {};
     renderComposeTags();
+    setCaseItems(data.caseItems);
+    canExportCsv = ENABLE_CSV_EXPORT && !!data.canExportCsv;
+    updateExportCard();
     populateFilterSelects();
     persistStore();
 
@@ -1889,6 +1942,10 @@
         tags: sortTags(composeTags)
       }
     };
+    var kase = readCaseSelect(el.caseSelect);
+    op.payload.caseMajor = kase[0];
+    op.payload.caseMinor = kase[1];
+    fillCaseSelect(el.caseSelect); // 次の記録は既定（日常生活／日中の様子）に戻す
     composeImages = [];
     composeTags = (mtgMode.on && mtgTagAvailable()) ? [MTG_TAG] : []; // 朝MTGモード中は次の記録にもタグを付けておく
     renderComposeTags();
@@ -1931,13 +1988,14 @@
 
   /** base には「編集を始めたときの内容」を入れ、サーバー側で別の端末からの更新と競合していないか確かめる */
   /** newImages を渡したときだけ画像も差し替える（Googleログイン版では渡さないので、画像はそのまま） */
-  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags, newDateKey) {
+  function requestUpdate(item, newTime, newTarget, newContent, newImages, newTags, newDateKey, newCase) {
     var payload = {
       id: item.id, dateKey: item.dateKey, time: newTime, target: newTarget, content: newContent,
       base: { time: item.time, target: item.target, content: item.content, tags: item.tags || [] }
     };
     if (newImages) payload.images = newImages;
     if (newTags) payload.tags = newTags;
+    if (newCase) { payload.caseMajor = newCase[0]; payload.caseMinor = newCase[1]; }
     var moving = newDateKey && newDateKey !== item.dateKey;
     if (moving) payload.newDateKey = newDateKey;
     mutatePendingAddOrEnqueue(item.id, function (addOp) {
@@ -1947,6 +2005,7 @@
       addOp.payload.content = newContent;
       if (newImages) addOp.payload.images = newImages;
       if (newTags) addOp.payload.tags = newTags;
+      if (newCase) { addOp.payload.caseMajor = newCase[0]; addOp.payload.caseMinor = newCase[1]; }
     }, 'update', payload);
   }
 
@@ -2013,6 +2072,8 @@
         dateKey: viewDateKey, target: el.targetSelect.value, time: readTimeInput(el.timeInput) || '',
         content: content, tags: composeTags.slice(), images: images, savedAt: Date.now()
       };
+      var kase = readCaseSelect(el.caseSelect);
+      d.caseMajor = kase[0]; d.caseMinor = kase[1];
       localStorage.setItem(k, JSON.stringify(d));
       showDraftSaved(d.savedAt);
     } catch (e) { /* 保存できなくても入力はそのまま続けられる */ }
@@ -2047,6 +2108,7 @@
     }
     composeTags = Array.isArray(d.tags) ? d.tags.slice() : [];
     renderComposeTags();
+    fillCaseSelect(el.caseSelect, d.caseMajor, d.caseMinor);
     if (ENABLE_IMAGES && (d.images || []).length) {
       // 写真は端末に一時保存されているものだけ戻す
       Promise.all(d.images.map(function (x) {
@@ -2080,6 +2142,7 @@
     el.timeInput.addEventListener('input', scheduleDraftSave);
     el.timeInput.addEventListener('change', scheduleDraftSave);
     el.nowBtn.addEventListener('click', scheduleDraftSave);
+    el.caseSelect.addEventListener('change', scheduleDraftSave);
     el.tagRow.addEventListener('click', function (e) { if (e.target.closest('.tag-btn')) scheduleDraftSave(); });
     // 画面を閉じる・別のアプリに切り替える直前は、待たずに保存する
     window.addEventListener('pagehide', function () { if (draftTimer) saveComposeDraftNow(); });
@@ -2103,6 +2166,7 @@
         el.timeInput.value = nowHHMM();
         composeTags = [];
         renderComposeTags();
+        fillCaseSelect(el.caseSelect);
         forgetLocalImages(composeImages);
         composeImages = [];
         if (ENABLE_IMAGES) renderComposeImages();
@@ -2407,7 +2471,8 @@
           clientOpId: op.opId, dateKey: op.dateKey,
           target: op.payload.target, content: op.payload.content, time: op.payload.time,
           transcribed: !!op.payload.transcribed,
-          tags: op.payload.tags || []
+          tags: op.payload.tags || [],
+          caseMajor: op.payload.caseMajor || '', caseMinor: op.payload.caseMinor || ''
         };
         if (op.payload.images && op.payload.images.length) body.images = sentImages(op.payload.images);
         return callServer('addRecord', body);
@@ -2591,7 +2656,8 @@
           id: op.tempId, dateKey: op.dateKey, time: op.payload.time,
           staffName: me.staffName, staffColor: me.staffColor || '', staffEmail: me.email,
           target: op.payload.target, content: op.payload.content,
-          transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [], canEdit: true, _pending: true
+          transcribed: !!op.payload.transcribed, images: op.payload.images || [], tags: op.payload.tags || [],
+          caseMajor: op.payload.caseMajor || '', caseMinor: op.payload.caseMinor || '', canEdit: true, _pending: true
         };
       } else if (op.type === 'update' && map[op.id] && op.payload.newDateKey && op.payload.newDateKey !== viewDateKey) {
         delete map[op.id];
@@ -2599,6 +2665,7 @@
         map[op.id] = Object.assign({}, map[op.id], { time: op.payload.time, target: op.payload.target, content: op.payload.content, _pending: true });
         if (op.payload.images) map[op.id].images = op.payload.images;
         if (op.payload.tags) map[op.id].tags = op.payload.tags;
+        if (op.payload.caseMajor !== undefined) { map[op.id].caseMajor = op.payload.caseMajor; map[op.id].caseMinor = op.payload.caseMinor; }
       } else if (op.type === 'delete') {
         delete map[op.id];
       } else if (op.type === 'toggle' && map[op.id]) {
@@ -3139,6 +3206,8 @@
             var k = tagColorKey(t);
             return '<span class="chip chip-tag"' + (k ? ' data-color="' + k + '"' : '') + '>' + escapeHtml(t) + '</span>';
           }).join('') +
+          (isDefaultCase(item.caseMajor, item.caseMinor) ? ''
+            : '<span class="chip chip-case" title="福祉見聞録のケース項目">' + escapeHtml(item.caseMajor + '／' + item.caseMinor) + '</span>') +
           (item.canEdit && !item._pending ? '<span class="chip chip-mine">自分の記録</span>' : '') +
           (item._pending ? '<span class="chip chip-pending">未送信</span>' : '') +
         '</div>' +
@@ -3228,6 +3297,7 @@
       item.content = values.content;
       if (values.images) item.images = values.images;
       if (values.tags) item.tags = values.tags;
+      if (values.caseMajor) { item.caseMajor = values.caseMajor; item.caseMinor = values.caseMinor; }
       if (values.dateKey) item.dateKey = values.dateKey;
     }
     renderHandovers();
@@ -3246,6 +3316,7 @@
       item.content = values.content;
       if (values.images) item.images = values.images;
       if (values.tags) item.tags = values.tags;
+      if (values.caseMajor) { item.caseMajor = values.caseMajor; item.caseMinor = values.caseMinor; }
       if (values.dateKey) item.dateKey = values.dateKey;
       lastSearch.records.sort(function (a, b) {
         if (a.dateKey !== b.dateKey) return a.dateKey < b.dateKey ? -1 : 1;
@@ -3323,6 +3394,141 @@
     setTimeout(function () { if (start > 0 && window.scrollY >= start - 1) window.scrollTo(0, 0); }, 400);
   }
 
+  // ---------- 福祉見聞録のケース項目・CSV書き出し ----------
+  // ケース項目：記録ごとに大項目／中項目を選ぶ（選択肢は設定シートの「ケース項目マスタ」）。空欄の記録は既定として扱う。
+  // CSV書き出し：アプリ版で、職員マスタ H列「CSV書き出し」にチェックがある職員だけ。絞り込み・印刷の画面に出す。
+  // ファイルは UTF-8（BOM付き）・CRLF。中身はサーバー（exportKenbunCsv）が作り、書き出せない記録は理由つきで返ってくる。
+  var DEFAULT_CASE = ['日常生活', '日中の様子'];
+  var caseItems = [DEFAULT_CASE.slice()];
+  var canExportCsv = false;
+  var lastExport = null; // 直前の書き出し { records: [{id, dateKey}], count, marked }
+
+  function isDefaultCase(major, minor) {
+    return !major || !minor || (major === DEFAULT_CASE[0] && minor === DEFAULT_CASE[1]);
+  }
+  /** ケース項目の選択肢を入れ、指定の項目（省略時は既定）を選ぶ */
+  function fillCaseSelect(select, major, minor) {
+    var want = isDefaultCase(major, minor) ? DEFAULT_CASE : [major, minor];
+    var list = caseItems.slice();
+    // ケース項目マスタから外れた項目の記録も、そのまま編集できるよう選択肢に加える
+    if (!list.some(function (c) { return c[0] === want[0] && c[1] === want[1]; })) list.push(want);
+    select.innerHTML = '';
+    list.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c[0] + '\t' + c[1];
+      o.textContent = c[0] + '／' + c[1];
+      select.appendChild(o);
+    });
+    select.value = want[0] + '\t' + want[1];
+  }
+  function readCaseSelect(select) {
+    var p = String((select && select.value) || '').split('\t');
+    return p.length === 2 && p[0] && p[1] ? p : DEFAULT_CASE.slice();
+  }
+  /** サーバーから届いたケース項目の一覧に入れ替える（入力中の選択は残す） */
+  function setCaseItems(list) {
+    var items = (Array.isArray(list) ? list : []).filter(function (c) { return Array.isArray(c) && c[0] && c[1]; })
+      .map(function (c) { return [String(c[0]), String(c[1])]; });
+    if (!items.some(function (c) { return c[0] === DEFAULT_CASE[0] && c[1] === DEFAULT_CASE[1]; })) items.unshift(DEFAULT_CASE.slice());
+    caseItems = items;
+    var cur = readCaseSelect(el.caseSelect);
+    fillCaseSelect(el.caseSelect, cur[0], cur[1]);
+  }
+
+  function updateExportCard() {
+    el.exportCard.hidden = !(ENABLE_CSV_EXPORT && canExportCsv && me) || viewMode === 'day';
+  }
+
+  function initExport() {
+    if (!ENABLE_CSV_EXPORT) return;
+    var today = localDateKey();
+    el.xTo.value = today;
+    el.xFrom.value = shiftDateKey(today, -6); // 既定は今日までの1週間
+    el.xFrom.max = today;
+    el.xTo.max = today;
+    el.exportBtn.addEventListener('click', runExport);
+    el.exportResult.addEventListener('click', function (e) {
+      if (e.target.closest('.export-mark')) markExported();
+    });
+  }
+
+  function exportErrorText(err) {
+    if (err && (err.isNetwork || err.isTimeout)) return '通信できませんでした。電波の良い場所でもう一度お試しください。';
+    return (err && err.message) || '書き出しに失敗しました。';
+  }
+
+  function runExport() {
+    var from = el.xFrom.value, to = el.xTo.value;
+    if (!from || !to) { showError('書き出す期間（開始日と終了日）を選んでください。'); return; }
+    clearError();
+    el.exportBtn.disabled = true;
+    el.exportBtn.textContent = '書き出し中…';
+    callServer('exportKenbunCsv', { from: from, to: to, untranscribedOnly: el.xUntranscribed.checked }, 120000).then(function (res) {
+      lastExport = { records: res.records || [], count: res.count || 0, marked: false };
+      if (res.count) downloadCsv(res.fileName || 'kenbunroku.csv', res.csv || '');
+      renderExportResult(res);
+    }).catch(function (err) {
+      showError(exportErrorText(err));
+    }).then(function () {
+      el.exportBtn.disabled = false;
+      el.exportBtn.textContent = 'CSVを書き出す';
+    });
+  }
+
+  /** BOM（EF BB BF）を付けて保存する。改行（CRLF）はサーバーで作ったまま */
+  function downloadCsv(name, text) {
+    var blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+  }
+
+  function renderExportResult(res) {
+    var skipped = res.skipped || [];
+    var html = res.count
+      ? '<p class="export-sum">✓ ' + res.count + '件を書き出しました（' + escapeHtml(res.fileName || '') + '）</p>'
+      : '<p class="export-sum none">書き出す記録はありませんでした。</p>';
+    if (skipped.length) {
+      html += '<div class="export-warn"><p><strong>⚠ CSVに入れなかった記録が ' + skipped.length + '件あります。</strong>' +
+        '直せるものは直してから、もう一度書き出してください。</p><ul>' +
+        skipped.slice(0, 100).map(function (x) {
+          return '<li>' + escapeHtml(monthDayLabel(x.dateKey) + ' ' + (x.time || '') + ' ' + (x.target || '') + (x.staffName ? '（' + x.staffName + '）' : '')) +
+            '<span class="why">' + escapeHtml((x.reasons || []).join('／')) + '</span></li>';
+        }).join('') +
+        (skipped.length > 100 ? '<li>ほか ' + (skipped.length - 100) + '件</li>' : '') +
+        '</ul></div>';
+    }
+    if (res.count) {
+      html += '<p class="export-note">福祉見聞録への転記が終わったのを確かめてから押してください。</p>' +
+        '<button type="button" class="btn-secondary export-mark">書き出した' + res.count + '件を転記済みにする</button>';
+    }
+    el.exportResult.innerHTML = html;
+    el.exportResult.hidden = false;
+  }
+
+  function markExported() {
+    if (!lastExport || !lastExport.records.length || lastExport.marked) return;
+    if (!confirm('書き出した' + lastExport.count + '件を「転記済み」にします。\n福祉見聞録への転記は終わりましたか？')) return;
+    var btn = el.exportResult.querySelector('.export-mark');
+    if (btn) { btn.disabled = true; btn.textContent = '転記済みにしています…'; }
+    callServer('markTranscribedBulk', { items: lastExport.records }, 120000).then(function (res) {
+      lastExport.marked = true;
+      var note = '✓ ' + (res.updated || 0) + '件を転記済みにしました' +
+        (res.missing ? '（' + res.missing + '件は、書き出したあとに削除・移動されたため付けていません）' : '');
+      if (btn) btn.outerHTML = '<p class="export-sum">' + escapeHtml(note) + '</p>';
+      var tip = el.exportResult.querySelector('.export-note');
+      if (tip) tip.remove();
+      manualRefresh(); // 日ごとの画面の「転記済み」も新しくする
+    }).catch(function (err) {
+      if (btn) { btn.disabled = false; btn.textContent = '書き出した' + lastExport.count + '件を転記済みにする'; }
+      showError(exportErrorText(err));
+    });
+  }
+
   // ---------- 絞り込み・印刷 ----------
 
   function setMode(mode) {
@@ -3337,6 +3543,7 @@
     el.dateNav.classList.toggle('jump-only', !isDay);
     el.composeCard.hidden = !isDay || !me;
     el.filterCard.hidden = isDay;
+    updateExportCard();
     el.resultSummary.hidden = isDay || !lastSearch;
     el.results.hidden = isDay || !lastSearch;
     el.resultPager.hidden = isDay || !lastSearch || !pagerOptions().length;
@@ -3617,6 +3824,7 @@
           '<p class="edit-date-note" hidden></p></div>' +
         '<textarea class="edit-content">' + escapeHtml(item.content) + '</textarea>' +
         '<div class="tag-row edit-tags"></div>' +
+        '<div class="case-box"><label class="hint">福祉見聞録のケース項目</label><select class="edit-case"></select></div>' +
         (ENABLE_IMAGES
           ? '<div class="photo-row edit-photos"><button type="button" class="photo-btn edit-photo-btn">📷 写真を追加</button>' +
             '<input type="file" class="edit-photo-input" accept="image/*" multiple hidden></div>'
@@ -3635,6 +3843,7 @@
     bindAutoGrow(card.querySelector('.edit-content'));
     var editTags = (item.tags || []).slice();
     renderTagButtons(card.querySelector('.edit-tags'), editTags);
+    fillCaseSelect(card.querySelector('.edit-case'), item.caseMajor, item.caseMinor);
     var dateEl = card.querySelector('.edit-date');
     var dateNote = card.querySelector('.edit-date-note');
     var originalDate = item.dateKey || viewDateKey;
@@ -3686,7 +3895,9 @@
       editingId = null;
       if (editImages) values.images = editImages;
       values.tags = sortTags(editTags);
-      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags, newDate); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
+      var editCase = readCaseSelect(card.querySelector('.edit-case'));
+      values.caseMajor = editCase[0]; values.caseMinor = editCase[1];
+      requestUpdate(item, values.time, values.target, values.content, editImages || undefined, values.tags, newDate, editCase); // 先に送る（編集前の内容を「編集を始めたときの内容」として使う）
       if (newDate !== originalDate) showToast(dateKeyLabel(newDate) + ' に移しました');
       if (onClose) onClose(true, item, values);
     });
