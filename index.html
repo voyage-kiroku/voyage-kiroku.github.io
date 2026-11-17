@@ -858,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjxzjwn';
+  var APP_BUILD = 'mwjyt7rf';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -2588,9 +2588,13 @@
    * タグの選択ボタンを並べる。selected（配列）をその場で書き換える。
    * タグマスタから消えたタグでも、付いていれば外せるように表示する。
    */
-  function renderTagButtons(row, selected, onChange) {
-    var names = tagList.filter(function (t) { return retiredTags.indexOf(t) === -1; });
-    selected.forEach(function (t) { if (names.indexOf(t) === -1) names.push(t); });
+  /**
+   * 「朝MTG」はボタンに出さない（付けるのは入力欄右上の「☀ 朝MTG」ボタンだけ）。
+   * 編集では、付いている記録なら外せるように出す。入力欄（isCompose）では付いていても出さない。
+   */
+  function renderTagButtons(row, selected, onChange, isCompose) {
+    var names = tagList.filter(function (t) { return retiredTags.indexOf(t) === -1 && t !== MTG_TAG; });
+    selected.forEach(function (t) { if (names.indexOf(t) === -1 && !(isCompose && t === MTG_TAG)) names.push(t); });
     row.innerHTML = '';
     row.hidden = names.length === 0;
     names.forEach(function (name) {
@@ -2633,7 +2637,7 @@
 
   function renderComposeTags() {
     el.tagBox.hidden = tagList.length === 0;
-    renderTagButtons(el.tagRow, composeTags, function () { updateAutoCaseOption(el.caseSelect, composeTags); });
+    renderTagButtons(el.tagRow, composeTags, function () { updateAutoCaseOption(el.caseSelect, composeTags); }, true);
     updateAutoCaseOption(el.caseSelect, composeTags);
     updateMtgModeUI();
     if (me && !mtgFirstCheck && mtgTagAvailable()) { mtgFirstCheck = true; setTimeout(checkMtgMode, 0); }
