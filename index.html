@@ -832,9 +832,9 @@
   <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
 
   <div class="result-pager" id="resultPager" hidden>
-    <button type="button" class="nav-btn" id="pagerPrev" aria-label="前の利用者">‹</button>
+    <button type="button" class="nav-btn" id="pagerPrev" aria-label="前の利用者" title="前の利用者（Alt＋，）">‹</button>
     <select id="pagerSelect" aria-label="表示する利用者"></select>
-    <button type="button" class="nav-btn" id="pagerNext" aria-label="次の利用者">›</button>
+    <button type="button" class="nav-btn" id="pagerNext" aria-label="次の利用者" title="次の利用者（Alt＋．）">›</button>
   </div>
   <p class="result-summary" id="resultSummary" hidden></p>
   <div id="results" hidden></div>
@@ -858,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjx66o6';
+  var APP_BUILD = 'mwjxhmwj';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4410,15 +4410,45 @@
       return;
     }
     var i = sel.selectedIndex + dir;
-    while (i >= 0 && i < n && /^[0-9０-９]+[\s　]*$/.test(sel.options[i].value)) i += dir; // 空室（部屋番号だけの行）は飛ばす
+    while (i >= 0 && i < n && isVacantRoom(sel.options[i].value)) i += dir;
     if (i < 0 || i >= n) { showToast(dir > 0 ? '名簿の最後の人です' : '名簿の最初の人です'); return; }
     sel.selectedIndex = i;
     sel.dispatchEvent(new Event('change', { bubbles: true }));
-    sel.classList.add('jump-flash');
-    clearTimeout(stepTarget.timer);
-    stepTarget.timer = setTimeout(function () { sel.classList.remove('jump-flash'); }, 700);
+    flashOnce(sel);
     showToast('対象者：' + sel.value);
     if (document.activeElement !== el.contentInput) el.contentInput.focus(); // すぐ書き始められるように
+  }
+
+  /** 空室（名前が部屋番号だけの行）か。キーで1人ずつ送るときは飛ばす */
+  function isVacantRoom(name) { return /^[0-9０-９]+[\s　]*$/.test(String(name || '')); }
+
+  function flashOnce(node) {
+    node.classList.add('jump-flash');
+    clearTimeout(node._flashTimer);
+    node._flashTimer = setTimeout(function () { node.classList.remove('jump-flash'); }, 700);
+  }
+
+  /**
+   * 絞り込み結果を、キーで前後の利用者へめくる（‹ › ボタンと同じ並び。空室は飛ばす）。
+   * 先頭の利用者から前へ戻ると「すべての利用者」。最後で止まる。
+   */
+  function stepPagerKey(dir) {
+    var names = pagerOptions();
+    if (el.resultPager.hidden || !names.length) {
+      showToast('利用者ごとにめくれるのは、対象者を「すべて」にして絞り込んだときです');
+      return;
+    }
+    var i = pagerTarget ? names.indexOf(pagerTarget) : -1, next = i + dir;
+    while (next >= 0 && next < names.length && isVacantRoom(names[next])) next += dir;
+    if (next >= names.length) { showToast('最後の利用者です'); return; }
+    if (next < 0) {
+      if (i === -1) { showToast('「すべての利用者」を表示しています'); return; }
+      showPagerTarget('');
+    } else {
+      showPagerTarget(names[next]);
+    }
+    flashOnce(el.pagerSelect);
+    showToast(pagerTarget ? '表示：' + pagerTarget : 'すべての利用者');
   }
 
   function progSwitchSlot(slot) {
@@ -4561,11 +4591,13 @@
         showToast(mtgMode.on ? '朝MTGモード：オン（〜' + draftHHMM(mtgMode.until) + '）' : '朝MTGモード：オフ');
         return;
       }
-      // Alt＋．次の人／Alt＋，前の人：入力欄の「対象者」を名簿順（選択肢の並び）で切り替える（朝MTG用。支援記録の画面）
+      // Alt＋．次の人／Alt＋，前の人（支援記録の画面）
+      // 日ごと：入力欄の「対象者」を名簿順（選択肢の並び）で切り替える（朝MTG用）。絞り込み：結果を前後の利用者へめくる（‹ › と同じ）
       if (e.code === 'Period' || e.code === 'Comma') {
         if (appMode !== 'log') return;
         e.preventDefault();
-        stepTarget(e.code === 'Period' ? 1 : -1);
+        if (viewMode === 'filter') stepPagerKey(e.code === 'Period' ? 1 : -1);
+        else stepTarget(e.code === 'Period' ? 1 : -1);
         return;
       }
       var m = /^(?:Digit|Numpad)([1245])$/.exec(e.code || '');
