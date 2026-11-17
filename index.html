@@ -253,6 +253,16 @@
   .export-sum { margin: 0 0 8px; font-weight: 700; color: var(--good); }
   .export-sum.none { color: var(--muted); }
   .export-mtg { margin: 0 0 8px; color: var(--muted); font-size: .8rem; }
+  /* 共有アカウント（ボヤージュ）の記録：サインから記入者を決めた結果の確認 */
+  .sign-confirm { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; background: var(--surface); }
+  .sign-confirm > p { margin: 0 0 6px; }
+  .sign-head { font-weight: 700; font-size: .84rem; margin: 10px 0 4px !important; }
+  .sign-head.ng { color: var(--muted); }
+  .sign-list { margin: 0; padding-left: 1.2em; font-size: .82rem; }
+  .sign-list li { margin: 4px 0; }
+  .sign-list .to { display: block; font-weight: 700; color: var(--good); }
+  .sign-list .why { display: block; color: var(--muted); font-size: .76rem; }
+  .sign-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
   .export-warn { background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 8px 11px; margin: 0 0 10px; }
   .export-warn p { margin: 0 0 4px; }
   .export-warn ul { margin: 0; padding-left: 1.2em; }
@@ -858,7 +868,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjyt7rf';
+  var APP_BUILD = 'mwjzx7em';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -3496,6 +3506,8 @@
     el.exportBtn.addEventListener('click', runExport);
     el.exportResult.addEventListener('click', function (e) {
       if (e.target.closest('.export-mark')) markExported();
+      if (e.target.closest('.sign-ok')) confirmSignExport(true);
+      if (e.target.closest('.sign-cancel')) confirmSignExport(false);
     });
   }
 
@@ -3512,6 +3524,8 @@
     el.exportBtn.textContent = '書き出し中…';
     callServer('exportKenbunCsv', { from: from, to: to, untranscribedOnly: el.xUntranscribed.checked }, 120000).then(function (res) {
       lastExport = { records: res.records || [], count: res.count || 0, marked: false };
+      // 共有アカウントの記録があるときは、サインの判定結果を見てから書き出す
+      if (res.count && (res.signs || []).length) { pendingSignExport = res; renderSignConfirm(res); return; }
       if (res.count) downloadCsv(res.fileName || 'kenbunroku.csv', res.csv || '');
       renderExportResult(res);
     }).catch(function (err) {
@@ -3532,6 +3546,52 @@
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+  }
+
+  var pendingSignExport = null; // 確認待ちの書き出し（サインの判定結果を見せている間）
+
+  /** サインから記入者を決めた結果（変える記録・変えない記録と理由）を見せ、「確認して書き出す／やめる」を選ぶ */
+  function renderSignConfirm(res) {
+    var list = res.signs || [];
+    var ok = list.filter(function (x) { return x.status === 'ok'; });
+    var ng = list.filter(function (x) { return x.status !== 'ok'; });
+    var head = function (x) { return escapeHtml(monthDayLabel(x.dateKey) + ' ' + (x.time || '') + ' ' + (x.target || '')); };
+    var who = function (name, code) { return escapeHtml(name + (code ? '（' + code + '）' : '')); };
+    var signText = function (x) { return (x.signs || []).length ? 'サイン：「' + x.signs.map(escapeHtml).join('」「') + '」' : ''; };
+    var html = '<div class="sign-confirm">' +
+      '<p><strong>書き出す前に確認してください。</strong>共有アカウントの記録が ' + list.length + '件あります（CSVに入る ' + res.count + '件のうち）。' +
+      '本文のサインから記入者を決め、CSVの本文からはサインを除きます（アプリの記録は変わりません）。</p>';
+    if (ok.length) {
+      html += '<p class="sign-head">サインから記入者を変える記録：' + ok.length + '件</p><ul class="sign-list">' +
+        ok.map(function (x) {
+          return '<li>' + head(x) + '<span class="to">' + who(x.fromName, x.fromCode) + ' → ' + who(x.toName, x.toCode) + '</span>' +
+            '<span class="why">' + signText(x) + '</span></li>';
+        }).join('') + '</ul>';
+    }
+    if (ng.length) {
+      html += '<p class="sign-head ng">記入者を変えない記録（職員マスタのコードのまま）：' + ng.length + '件</p><ul class="sign-list">' +
+        ng.map(function (x) {
+          return '<li>' + head(x) + '<span class="why">' + who(x.fromName, x.fromCode) + 'のまま：' + escapeHtml(x.reason || '') +
+            (signText(x) ? '（' + signText(x) + '）' : '') + '</span></li>';
+        }).join('') + '</ul>';
+    }
+    html += '<div class="sign-actions"><button type="button" class="btn-secondary sign-cancel">やめる</button>' +
+      '<button type="button" class="btn-primary sign-ok">確認して書き出す</button></div></div>';
+    el.exportResult.innerHTML = html;
+    el.exportResult.hidden = false;
+  }
+
+  function confirmSignExport(go) {
+    var res = pendingSignExport;
+    pendingSignExport = null;
+    if (!res) return;
+    if (!go) {
+      lastExport = null;
+      el.exportResult.innerHTML = '<p class="export-sum none">書き出しをやめました。</p>';
+      return;
+    }
+    downloadCsv(res.fileName || 'kenbunroku.csv', res.csv || '');
+    renderExportResult(res);
   }
 
   function renderExportResult(res) {
