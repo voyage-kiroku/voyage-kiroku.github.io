@@ -858,7 +858,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjxhmwj';
+  var APP_BUILD = 'mwjxzjwn';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -881,6 +881,8 @@
   var staffNameList = [];     // 記録者（職員）の一覧
   var tagList = [];           // タグの一覧（タグマスタ）
   var tagColors = {};         // タグ名 → 枠の色（タグマスタのB列）
+  var tagCases = {};          // タグ名 → [見聞録の大項目, 中項目]（タグマスタのC・D列）
+  var retiredTags = [];       // 入力のボタンに出さないタグ（タグマスタのE列「入力で使わない」。絞り込みでは選べる）
   var EXCLUDE_TAG_KEY = 'srn.excludeTag'; // 絞り込みの「除くタグ」（毎朝使うので端末に覚えておく）
   var composeTags = [];       // 新しい記録に付けるタグ
   var lastSearch = null;      // 直近の絞り込み結果 { q, records, truncated }
@@ -1260,12 +1262,12 @@
     try {
       var raw = localStorage.getItem(STORE_KEY);
       var s = raw ? JSON.parse(raw) : {};
-      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [], tags: s.tags || [], tagColors: s.tagColors || {} };
-    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [], tags: [], tagColors: {} }; }
+      return { me: s.me || null, baseRecords: s.baseRecords || [], queue: s.queue || [], dateKey: s.dateKey || null, tempIdMap: s.tempIdMap || {}, targets: s.targets || [], staffNames: s.staffNames || [], tags: s.tags || [], tagColors: s.tagColors || {}, tagCases: s.tagCases || {}, retiredTags: s.retiredTags || [], caseItems: s.caseItems, canExportCsv: s.canExportCsv };
+    } catch (e) { return { me: null, baseRecords: [], queue: [], dateKey: null, tempIdMap: {}, targets: [], staffNames: [], tags: [], tagColors: {}, tagCases: {}, retiredTags: [] }; }
   }
   function persistStore() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList, tagColors: tagColors, caseItems: caseItems, canExportCsv: canExportCsv }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ me: me, baseRecords: baseRecords, queue: queue, dateKey: viewDateKey, tempIdMap: tempIdMap, targets: targetList, staffNames: staffNameList, tags: tagList, tagColors: tagColors, tagCases: tagCases, retiredTags: retiredTags, caseItems: caseItems, canExportCsv: canExportCsv }));
     } catch (e) { /* 容量不足・プライベートモード等は無視 */ }
   }
 
@@ -1345,7 +1347,7 @@
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
         return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
-          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, programMembers: res.programMembers, programStaff: res.programStaff, caseItems: res.caseItems, canExportCsv: res.canExportCsv, dateKey: res.dateKey, records: res.records };
+          targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, tagCases: res.tagCases, retiredTags: res.retiredTags, programMembers: res.programMembers, programStaff: res.programStaff, caseItems: res.caseItems, canExportCsv: res.canExportCsv, dateKey: res.dateKey, records: res.records };
       }
       return res;
     });
@@ -1483,6 +1485,8 @@
     staffNameList = stored.staffNames || [];
     tagList = stored.tags || [];
     tagColors = stored.tagColors || {};
+    tagCases = stored.tagCases || {};
+    retiredTags = stored.retiredTags || [];
     canExportCsv = ENABLE_CSV_EXPORT && !!stored.canExportCsv;
     setCaseItems(stored.caseItems);
     if (targetList.length) populateSelect(el.targetSelect, targetList, true);
@@ -1693,6 +1697,8 @@
     staffNameList = data.staffNames || [];
     tagList = data.tags || [];
     tagColors = data.tagColors || {};
+    tagCases = data.tagCases || {};
+    retiredTags = data.retiredTags || [];
     renderComposeTags();
     setCaseItems(data.caseItems);
     canExportCsv = ENABLE_CSV_EXPORT && !!data.canExportCsv;
@@ -1946,7 +1952,7 @@
     var kase = readCaseSelect(el.caseSelect);
     op.payload.caseMajor = kase[0];
     op.payload.caseMinor = kase[1];
-    fillCaseSelect(el.caseSelect); // 次の記録は既定（日常生活／日中の様子）に戻す
+    fillCaseSelect(el.caseSelect); // 次の記録は「自動（タグから）」に戻す（タグを入れ直したあと renderComposeTags が表示を合わせる）
     composeImages = [];
     composeTags = (mtgMode.on && mtgTagAvailable()) ? [MTG_TAG] : []; // 朝MTGモード中は次の記録にもタグを付けておく
     renderComposeTags();
@@ -2108,8 +2114,8 @@
       if (el.targetSelect.value !== d.target) draftTargetWanted = d.target;
     }
     composeTags = Array.isArray(d.tags) ? d.tags.slice() : [];
+    fillCaseSelect(el.caseSelect, d.caseMajor, d.caseMinor, composeTags);
     renderComposeTags();
-    fillCaseSelect(el.caseSelect, d.caseMajor, d.caseMinor);
     if (ENABLE_IMAGES && (d.images || []).length) {
       // 写真は端末に一時保存されているものだけ戻す
       Promise.all(d.images.map(function (x) {
@@ -2166,8 +2172,8 @@
         autoGrow(el.contentInput);
         el.timeInput.value = nowHHMM();
         composeTags = [];
+        fillCaseSelect(el.caseSelect, '', '', composeTags);
         renderComposeTags();
-        fillCaseSelect(el.caseSelect);
         forgetLocalImages(composeImages);
         composeImages = [];
         if (ENABLE_IMAGES) renderComposeImages();
@@ -2582,8 +2588,8 @@
    * タグの選択ボタンを並べる。selected（配列）をその場で書き換える。
    * タグマスタから消えたタグでも、付いていれば外せるように表示する。
    */
-  function renderTagButtons(row, selected) {
-    var names = tagList.slice();
+  function renderTagButtons(row, selected, onChange) {
+    var names = tagList.filter(function (t) { return retiredTags.indexOf(t) === -1; });
     selected.forEach(function (t) { if (names.indexOf(t) === -1) names.push(t); });
     row.innerHTML = '';
     row.hidden = names.length === 0;
@@ -2598,6 +2604,7 @@
         var i = selected.indexOf(name);
         if (i === -1) selected.push(name); else selected.splice(i, 1);
         b.setAttribute('aria-pressed', i === -1 ? 'true' : 'false');
+        if (onChange) onChange();
       });
       row.appendChild(b);
     });
@@ -2626,7 +2633,8 @@
 
   function renderComposeTags() {
     el.tagBox.hidden = tagList.length === 0;
-    renderTagButtons(el.tagRow, composeTags);
+    renderTagButtons(el.tagRow, composeTags, function () { updateAutoCaseOption(el.caseSelect, composeTags); });
+    updateAutoCaseOption(el.caseSelect, composeTags);
     updateMtgModeUI();
     if (me && !mtgFirstCheck && mtgTagAvailable()) { mtgFirstCheck = true; setTimeout(checkMtgMode, 0); }
   }
@@ -3404,27 +3412,61 @@
   var canExportCsv = false;
   var lastExport = null; // 直前の書き出し { records: [{id, dateKey}], count, marked }
 
+  /** 空欄・既定（日常生活／日中の様子）は「自動」：タグから決める */
   function isDefaultCase(major, minor) {
     return !major || !minor || (major === DEFAULT_CASE[0] && minor === DEFAULT_CASE[1]);
   }
-  /** ケース項目の選択肢を入れ、指定の項目（省略時は既定）を選ぶ */
-  function fillCaseSelect(select, major, minor) {
-    var want = isDefaultCase(major, minor) ? DEFAULT_CASE : [major, minor];
-    var list = caseItems.slice();
+  /**
+   * タグから決まるケース項目（サーバーの caseFromTags_ と同じ決め方）。
+   * タグマスタの順に見て、既定以外のケース項目を持つ最初のタグのもの。なければ既定。
+   */
+  function caseFromTags(tags) {
+    var list = sortTags(tags || []);
+    for (var i = 0; i < list.length; i++) {
+      var c = tagCases[list[i]];
+      if (c && c[0] && c[1] && !(c[0] === DEFAULT_CASE[0] && c[1] === DEFAULT_CASE[1])) return [c[0], c[1]];
+    }
+    return DEFAULT_CASE.slice();
+  }
+  /** 「自動」の選択肢の文字を、今のタグに合わせる */
+  function updateAutoCaseOption(select, tags) {
+    var o = select && select.querySelector('option[value=""]');
+    if (!o) return;
+    var c = caseFromTags(tags);
+    o.textContent = '自動（タグから）：' + c[0] + '／' + c[1];
+  }
+  /**
+   * ケース項目の選択肢を入れ、指定の項目を選ぶ。先頭は「自動（タグから）」（空欄・既定の記録はこれ）。
+   * 既定の 日常生活／日中の様子 は「自動」と同じ扱いなので、選択肢には出さない。
+   */
+  function fillCaseSelect(select, major, minor, tags) {
+    var auto = isDefaultCase(major, minor);
+    var seen = {}, list = [];
+    caseItems.forEach(function (c) {
+      var k = c[0] + '\t' + c[1];
+      if (seen[k] || (c[0] === DEFAULT_CASE[0] && c[1] === DEFAULT_CASE[1])) return;
+      seen[k] = true;
+      list.push(c);
+    });
     // ケース項目マスタから外れた項目の記録も、そのまま編集できるよう選択肢に加える
-    if (!list.some(function (c) { return c[0] === want[0] && c[1] === want[1]; })) list.push(want);
+    if (!auto && !seen[major + '\t' + minor]) list.push([major, minor]);
     select.innerHTML = '';
+    var a = document.createElement('option');
+    a.value = '';
+    select.appendChild(a);
     list.forEach(function (c) {
       var o = document.createElement('option');
       o.value = c[0] + '\t' + c[1];
       o.textContent = c[0] + '／' + c[1];
       select.appendChild(o);
     });
-    select.value = want[0] + '\t' + want[1];
+    select.value = auto ? '' : major + '\t' + minor;
+    updateAutoCaseOption(select, tags);
   }
+  /** 選んだケース項目。「自動」は ['', '']（保存すると空欄＝タグから決める） */
   function readCaseSelect(select) {
     var p = String((select && select.value) || '').split('\t');
-    return p.length === 2 && p[0] && p[1] ? p : DEFAULT_CASE.slice();
+    return p.length === 2 && p[0] && p[1] ? p : ['', ''];
   }
   /** サーバーから届いたケース項目の一覧に入れ替える（入力中の選択は残す） */
   function setCaseItems(list) {
@@ -3433,7 +3475,7 @@
     if (!items.some(function (c) { return c[0] === DEFAULT_CASE[0] && c[1] === DEFAULT_CASE[1]; })) items.unshift(DEFAULT_CASE.slice());
     caseItems = items;
     var cur = readCaseSelect(el.caseSelect);
-    fillCaseSelect(el.caseSelect, cur[0], cur[1]);
+    fillCaseSelect(el.caseSelect, cur[0], cur[1], composeTags);
   }
 
   function updateExportCard() {
@@ -3846,8 +3888,9 @@
     applyTimeMode(card.querySelector('.edit-time'));
     bindAutoGrow(card.querySelector('.edit-content'));
     var editTags = (item.tags || []).slice();
-    renderTagButtons(card.querySelector('.edit-tags'), editTags);
-    fillCaseSelect(card.querySelector('.edit-case'), item.caseMajor, item.caseMinor);
+    var editCaseSel = card.querySelector('.edit-case');
+    renderTagButtons(card.querySelector('.edit-tags'), editTags, function () { updateAutoCaseOption(editCaseSel, editTags); });
+    fillCaseSelect(editCaseSel, item.caseMajor, item.caseMinor, editTags);
     var dateEl = card.querySelector('.edit-date');
     var dateNote = card.querySelector('.edit-date-note');
     var originalDate = item.dateKey || viewDateKey;
