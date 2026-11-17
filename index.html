@@ -720,6 +720,7 @@
           <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
           <div class="pg-actions">
             <button type="button" class="pg-btn" id="pgPrintBtn">🖨 印刷（午前・午後）</button>
+            <button type="button" class="pg-btn" id="pgCsvBtn" hidden title="福祉見聞録の日中活動実績へ入力するためのCSV（program_年月日.csv）を、この日の午前・午後の分だけ書き出します">⬇ 見聞録用プログラムCSV</button>
             <button type="button" class="pg-btn primary" id="pgReviewSave" hidden>振り返りを保存</button>
           </div>
         </div>
@@ -868,7 +869,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwk0vy89';
+  var APP_BUILD = 'mwkczjp6';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4428,6 +4429,7 @@
     if (appMode !== 'prog') return;
     var v = progView(), slot = prog.slot, s = v.slots[slot];
     el.pgSlotBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.slot === slot ? 'true' : 'false'); });
+    if (el.pgCsvBtn) el.pgCsvBtn.hidden = !progCsvAllowed(); // 見聞録用プログラムCSV（アプリ版・許可された職員だけ）
 
     // 枠の情報（決まったら1行に畳む）
     var infoKey = prog.dateKey + '|' + slot;
@@ -4776,6 +4778,8 @@
     el.pgReviewSave.addEventListener('mousedown', function (e) { e.preventDefault(); }); // 押したときに欄から離れて二重に送らない
     el.pgReviewSave.addEventListener('click', function () { saveReview(); el.pgReview.blur(); showToast('振り返りを保存しました'); });
     el.pgPrintBtn.addEventListener('click', progPrint);
+    el.pgCsvBtn = document.getElementById('pgCsvBtn');
+    el.pgCsvBtn.addEventListener('click', progExportCsv);
 
     // 一覧の操作
     el.pgList.addEventListener('input', function (e) {
@@ -4913,6 +4917,39 @@
   }
 
   /** 印刷：今の確認表と同じく、上に午前・下に午後 */
+  /**
+   * 見聞録用プログラムCSV（program_YYYYMMDD.csv）を書き出す。福祉見聞録の「日中活動実績」へ AutoHotkey で入力するためのもの。
+   * 画面の日付の1日分（午前・午後）。最新を読み直してから、参加の記録がある行（出欠を付けた・臨時で追加した人）だけを出す。
+   * 列：日付(YYYYMMDD), 枠(AM/PM), プログラム名, 利用者ID(名前の先頭の数字), 利用者名(数字より後ろ), 臨時(TRUE/FALSE), 出欠, 理由。理由の内容は出さない。
+   * 見聞録用CSV（kenbunroku）と同じく、アプリ版の「CSV書き出し」を許された職員だけに出す。
+   */
+  function progCsvAllowed() { return !!(ENABLE_CSV_EXPORT && canExportCsv && me); }
+  function progExportCsv() {
+    if (!progCsvAllowed()) return;
+    var btn = el.pgCsvBtn;
+    btn.disabled = true;
+    progFlush();
+    progLoad(true).catch(function () { /* 読み直せなければ、手元の内容で書き出す */ }).then(function () {
+      var v = progView(), dk = prog.dateKey || viewDateKey;
+      function cell(x) { x = String(x == null ? '' : x); return /[",\r\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
+      var lines = [['日付', '枠', 'プログラム名', '利用者ID', '利用者名', '臨時', '出欠', '理由'].join(',')];
+      ['AM', 'PM'].forEach(function (slot) {
+        var prName = (v.slots[slot] && v.slots[slot].prog) || '';
+        progNames(v, slot).forEach(function (name) {
+          var r = v.rows[progKey(slot, name)];
+          if (!r) return; // シートに行がない（まだ何も付けていない）人は出さない
+          var m = /^(\d+)[\s　]*(.*)$/.exec(String(name).trim());
+          lines.push([dk.replace(/-/g, ''), slot, prName, m ? m[1] : '', (m ? m[2] : String(name)).trim(),
+            r.temp ? 'TRUE' : 'FALSE', r.mark || '', r.reason || ''].map(cell).join(','));
+        });
+      });
+      if (lines.length === 1) { showToast('この日の参加記録がありません'); return; }
+      downloadCsv('program_' + dk.replace(/-/g, '') + '.csv', lines.join('\r\n') + '\r\n');
+      var pend = progQueue.some(function (q) { return q.payload && q.payload.dateKey === dk; });
+      showToast('見聞録用プログラムCSVを書き出しました（' + (lines.length - 1) + '行）' + (pend ? '。送信待ちの変更も含んでいます' : ''));
+    }).then(function () { btn.disabled = false; }, function () { btn.disabled = false; });
+  }
+
   function progPrint() {
     var v = progView();
     var html = ['AM', 'PM'].map(function (slot) {
