@@ -550,7 +550,7 @@
   .pg-btn.primary { background: var(--accent); color: var(--accent-ink); }
   .pg-btn.danger { background: transparent; color: var(--danger); padding-left: 0; }
   .pg-add { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px dashed var(--line); align-items: center; }
-  .pg-add select { flex: 1; min-width: 0; height: 2.5rem; }
+  .pg-add .pg-input { flex: 1; min-width: 0; height: 2.5rem; }
   .pg-note { font-size: .72rem; color: var(--muted); margin: 8px 18px 0; line-height: 1.6; }
   .pg-loading, .pg-empty-list { padding: 18px; font-size: .85rem; color: var(--muted); text-align: center; }
   .pg-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -868,7 +868,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwjzx7em';
+  var APP_BUILD = 'mwk0vy89';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4473,12 +4473,11 @@
     } else {
       html = list.length ? list.map(function (n) { return progRowHtml(n, progRowOf(v, slot, n)); }).join('')
         : '<p class="pg-empty-list">プログラムの名簿がまだありません。管理者が利用者マスタのB列「プログラム（並び順）」に数字を入れると、ここに並びます。</p>';
-      var others = targetList.filter(function (t) { return list.indexOf(t) === -1 && !/^\d+[\s　]*$/.test(t); }); // 空き部屋（番号だけ）は出さない
-      if (others.length) {
-        html += '<div class="pg-add"><select id="pgAddSel" aria-label="臨時の参加者"><option value="">＋ 臨時の参加者を追加</option>' +
-          others.map(function (t) { return '<option>' + escapeHtml(t) + '</option>'; }).join('') +
-          '</select><button type="button" class="pg-btn" data-act="add">追加</button></div>';
-      }
+      // 臨時の参加者：名前を自由に入力して追加（何人でも）。利用者マスタの名前は候補として出す（空き部屋・体験者・業務連絡などは出さない）
+      var others = targetList.filter(function (t) { return list.indexOf(t) === -1 && !/^\d+[\s　]*$/.test(t) && !/体験者|業務連絡|申し送り/.test(t); });
+      html += '<div class="pg-add"><input type="text" class="pg-input" id="pgAddName" list="pgAddList" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="＋ 臨時の参加者（名前を入力）" aria-label="臨時の参加者の名前">' +
+        '<datalist id="pgAddList">' + others.map(function (t) { return '<option value="' + escapeHtml(t) + '">'; }).join('') + '</datalist>' +
+        '<button type="button" class="pg-btn" data-act="add">追加</button></div>';
     }
     el.pgList.innerHTML = html;
     Object.keys(prog.flash).forEach(function (k) {
@@ -4798,16 +4797,26 @@
       if (prog.drafts[k]) delete prog.drafts[k].reasonText;
       progEnqueue('row', { slot: prog.slot, target: name, fields: { reasonText: val } });
     });
+    /** 名前に「さん」を付ける（もう「さん」「様」などで終わっていれば付けない） */
+    function progHonor(n) { return /(さん|様|くん|君|ちゃん)$/.test(n) ? n : n + 'さん'; }
+    /** 臨時の参加者を追加する（名前は自由に入力。同じ枠にもういる名前は追加しない） */
+    function progAddTemp() {
+      var inp = document.getElementById('pgAddName');
+      var name = inp ? inp.value.replace(/[\s　]+/g, ' ').trim().replace(/^[=+\-@]+/, '').trim() : '';
+      if (!name) { if (inp) inp.focus(); return; }
+      if (progNames(progView(), prog.slot).indexOf(name) !== -1) { showToast(progHonor(name) + 'は、もう一覧にいます'); return; }
+      progEnqueue('row', { slot: prog.slot, target: name, fields: {} });
+      showToast(progHonor(name) + 'を臨時の参加者に追加しました');
+      inp.value = '';
+      inp.blur();
+      renderProgram();
+    }
+    el.pgList.addEventListener('keydown', function (e) {
+      if (e.target.id === 'pgAddName' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); progAddTemp(); }
+    });
     el.pgList.addEventListener('click', function (e) {
       var act = e.target.closest('[data-act]');
-      if (act && act.dataset.act === 'add') {
-        var sel = document.getElementById('pgAddSel');
-        if (!sel || !sel.value) return;
-        progEnqueue('row', { slot: prog.slot, target: sel.value, fields: {} });
-        showToast(sel.value + 'さんを臨時の参加者に追加しました');
-        renderProgram();
-        return;
-      }
+      if (act && act.dataset.act === 'add') { progAddTemp(); return; }
       var row = e.target.closest('.pg-row');
       if (!row) return;
       var name = row.dataset.name, k = progKey(prog.slot, name);
@@ -4860,7 +4869,7 @@
           return;
         }
         if (act.dataset.act === 'remove') {
-          if (!window.confirm(name + 'さんを、この枠の臨時の参加者から外しますか？（付けた印やメモも消えます）')) return;
+          if (!window.confirm(progHonor(name) + 'を、この枠の臨時の参加者から外しますか？（付けた印やメモも消えます）')) return;
           progCloseRow(name);
           progEnqueue('row', { slot: prog.slot, target: name, remove: true });
           renderProgram();
