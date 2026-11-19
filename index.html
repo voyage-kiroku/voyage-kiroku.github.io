@@ -457,16 +457,94 @@
 
   /* ---------- 最上部の切り替え（支援記録 ⇔ プログラム）。画面の名前も兼ねる ---------- */
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0; }
-  .app-switch { flex: 1; min-width: 0; max-width: 420px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 14px; background: var(--surface-2); }
+  .app-switch { flex: 1; min-width: 0; max-width: 420px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; padding: 3px; border-radius: 14px; background: var(--surface-2); }
+  @media (max-width: 419px) { .app-btn { font-size: .86rem !important; letter-spacing: -.02em; } }
   .app-btn { font-family: "Zen Maru Gothic","Zen Kaku Gothic New",sans-serif; font-size: .98rem; font-weight: 700; color: var(--muted); background: transparent; border-radius: 11px; padding: 8px 4px; white-space: nowrap; }
   .app-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
   body.popout .app-switch { display: none; }
-  @media (min-width: 900px) { .app-switch { width: 300px; flex: none; } .app-btn { font-size: .9rem; padding: 6px 4px; } }
+  @media (min-width: 900px) { .app-switch { width: 420px; flex: none; } .app-btn { font-size: .9rem; padding: 6px 4px; } }
 
   /* プログラムの画面を出している間は、支援記録の部品を隠す */
   #progView { display: none; }
   body.app-prog #progView { display: block; }
   body.app-prog .layout, body.app-prog #modeTabs, body.app-prog .transcribe-group, body.app-prog .jump-btn { display: none !important; }
+
+  /* ---------- 利用者のまとめ（👤 利用者） ---------- */
+  #peopleView { display: none; }
+  body.app-people #peopleView { display: block; }
+  body.app-people .layout, body.app-people #modeTabs, body.app-people .transcribe-group, body.app-people .jump-btn,
+  body.app-people #dateNav, body.app-people #progView, body.app-people .prog-tools { display: none !important; }
+  /* 宿直の職員：まとめを見るだけ（ほかの画面への切り替えは出さない。サーバー側でも断っている） */
+  body.night #appLogBtn, body.night #appProgBtn, body.night .tools-row > :not(.size-row), body.night #syncPill { display: none !important; }
+  body.night .app-switch { grid-template-columns: 1fr; max-width: 220px; }
+  .pp-grid { padding: 0 16px 120px; }
+  @media (min-width: 900px) { .pp-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 0 20px; align-items: start; max-width: 1240px; margin: 0 auto; } .pp-side { position: sticky; top: calc(var(--topbar-h, 80px) + 8px); max-height: calc(100vh - var(--topbar-h, 80px) - 16px); overflow-y: auto; } .pp-back { display: none !important; } }
+  @media (max-width: 899px) { body.pp-open .pp-side { display: none; } body:not(.pp-open) .pp-main { display: none; } }
+  .pp-card { margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+  .pp-card h2 { font-size: 1rem; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pp-card h2 .grow { flex: 1; }
+  .pp-note { font-size: .78rem; color: var(--muted); line-height: 1.6; }
+  .pp-night-note { margin-top: 12px; background: var(--accent-soft); color: var(--accent-soft-ink); border-radius: 12px; padding: 8px 12px; font-size: .8rem; line-height: 1.6; }
+  .pp-search { width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: inherit; }
+  .pp-member { display: block; width: 100%; text-align: left; padding: 10px 10px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--ink); }
+  .pp-member + .pp-member { margin-top: 2px; }
+  .pp-member:hover { background: var(--surface-2); }
+  .pp-member[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); }
+  .pp-member b { font-size: .95rem; }
+  .pp-member small { display: block; font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .pp-head { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pp-head h1 { margin: 0; font-size: 1.35rem; font-family: "Zen Maru Gothic","Zen Kaku Gothic New",sans-serif; }
+  .pp-head .grow { flex: 1; }
+  .pp-back { font-size: .85rem; font-weight: 700; color: var(--accent); padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); }
+  .pp-jump { position: sticky; top: var(--topbar-h, 80px); z-index: 5; background: var(--bg); display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin-top: 6px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  @media (min-width: 900px) { .pp-jump { flex-wrap: wrap; } }
+  .pp-jump button { font-size: .78rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+  .pp-jump .pp-order-btn { background: transparent; color: var(--accent); border: 1px dashed var(--accent); }
+  .pp-btn { font-size: .8rem; font-weight: 700; padding: 6px 14px; border-radius: 999px; background: var(--surface-2); color: var(--ink); }
+  .pp-btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .pp-btn.small { font-size: .74rem; padding: 4px 11px; }
+  .pp-btn.ghost { background: transparent; color: var(--muted); }
+  .pp-btn.danger { background: var(--danger-soft); color: var(--danger); }
+  .pp-btn:disabled { opacity: .4; cursor: default; }
+  .pp-badge { font-size: .66rem; font-weight: 700; border-radius: 6px; padding: 2px 7px; background: var(--surface-2); color: var(--muted); }
+  .pp-badge.night { background: #e6e3f5; color: #4b3f8f; }
+  @media (prefers-color-scheme: dark) { .pp-badge.night { background: #2d2840; color: #c2b8f0; } }
+  .pp-body { white-space: pre-wrap; line-height: 1.8; font-size: .95rem; margin: 0; word-break: break-word; }
+  .pp-empty { font-size: .84rem; color: var(--muted); }
+  .pp-meta { margin-top: 10px; font-size: .72rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .pp-link { color: var(--accent); font-weight: 700; font-size: .76rem; text-decoration: underline; background: none; padding: 0; }
+  .pp-edit textarea { width: 100%; min-height: 9rem; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface); font: inherit; line-height: 1.8; resize: vertical; color: var(--ink); }
+  .pp-opts { margin-top: 8px; display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: .8rem; }
+  .pp-opts label { display: flex; gap: 8px; align-items: flex-start; font-weight: 700; }
+  .pp-opts input[type=checkbox] { margin-top: 3px; width: 1.05rem; height: 1.05rem; }
+  .pp-opts input[type=text] { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; color: var(--ink); }
+  .pp-row-end { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+  .pp-warn { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--danger-soft); color: var(--danger); font-size: .8rem; line-height: 1.6; white-space: pre-wrap; }
+  /* 項目と並びの編集 */
+  .pp-order-row { display: grid; grid-template-columns: 1.4rem 1fr auto; gap: 6px 8px; align-items: center; padding: 8px 0; border-top: 1px dashed var(--line); }
+  .pp-order-row:first-child { border-top: none; }
+  .pp-order-row .num { font-size: .78rem; font-weight: 700; color: var(--muted); text-align: center; }
+  .pp-order-row input[type=text], .pp-add input { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: inherit; color: var(--ink); }
+  .pp-order-row .btns { display: flex; gap: 4px; }
+  .pp-order-row .nightchk { grid-column: 2 / 4; font-size: .76rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .pp-add { display: flex; gap: 6px; margin-top: 12px; }
+  .pp-add .pp-btn { white-space: nowrap; }
+  .pp-suggest { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .pp-suggest button { font-size: .74rem; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 10px; }
+  /* 履歴（保存はすべて残し、画面では1日1版） */
+  .pp-hist { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 4px; }
+  .pp-ver { border-top: 1px dashed var(--line); padding: 9px 0; }
+  .pp-ver:first-child { border-top: none; }
+  .pp-ver-head { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .74rem; color: var(--muted); }
+  .pp-ver-head b { color: var(--ink); font-size: .8rem; }
+  .pp-tag { font-size: .66rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .pp-tag.now { background: var(--good-soft); color: var(--good); }
+  .pp-tag.rule { background: var(--danger-soft); color: var(--danger); }
+  .pp-diff { margin-top: 6px; font-size: .8rem; line-height: 1.65; background: var(--surface-2); border-radius: 10px; padding: 6px 10px; }
+  .pp-dl { white-space: pre-wrap; color: var(--muted); word-break: break-word; }
+  .pp-dl.del { color: var(--danger); text-decoration: line-through; background: var(--danger-soft); border-radius: 4px; }
+  .pp-dl.ins { color: var(--good); background: var(--good-soft); font-weight: 700; border-radius: 4px; }
+  .pp-inter { margin: 8px 0 0 6px; padding-left: 10px; border-left: 2px solid var(--line); }
   /* 「入力へ」は日付の段の右端。絞り込み・印刷では日付の部品だけ隠し、「▲ 条件へ」は残す */
   .date-nav .today-btn { margin-left: 2px; white-space: nowrap; }
   /* 「今日へ」も出ていて幅が足りないスマホでは、「入力へ」を記号だけの丸いボタンにする */
@@ -636,9 +714,10 @@
   <div class="topbar">
     <div class="brand-row">
       <h1 class="brand sr-only">ボヤージュ支援記録ノート</h1>
-      <div class="app-switch" role="group" aria-label="支援記録とプログラム記録の切り替え">
+      <div class="app-switch" role="group" aria-label="支援記録・プログラム記録・利用者のまとめの切り替え">
         <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true" title="支援記録（Alt＋1）">📝 支援記録</button>
         <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false" title="プログラム（Alt＋2）">✅ プログラム</button>
+        <button type="button" class="app-btn" id="appPeopleBtn" aria-pressed="false" title="利用者のまとめ（Alt＋3）">👤 利用者</button>
       </div>
     </div>
     <div class="date-nav" id="dateNav">
@@ -693,6 +772,19 @@
     </div>
   </div>
 
+
+  <div id="peopleView">
+    <div class="pp-grid">
+      <aside class="pp-side" id="ppSide">
+        <div class="pp-night-note" id="ppNightNote" hidden>🌙 宿直用の画面です。利用者のまとめを見ることだけできます。</div>
+        <div class="pp-card">
+          <input type="search" class="pp-search" id="ppSearch" placeholder="名前・ふりがなで探す" aria-label="利用者を探す">
+          <div id="ppList" style="margin-top:8px"></div>
+        </div>
+      </aside>
+      <section class="pp-main" id="ppMain" aria-live="polite"></section>
+    </div>
+  </div>
 
   <div id="progView">
     <div class="pg-grid">
@@ -871,7 +963,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwlc8cwi';
+  var APP_BUILD = 'mwmzb22k';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -1344,7 +1436,8 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot', exportKenbunCsv: 'exportKenbunCsv', markTranscribedBulk: 'markTranscribedBulk'
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot', exportKenbunCsv: 'exportKenbunCsv', markTranscribedBulk: 'markTranscribedBulk',
+    getSummary: 'getSummary', getSummaryHistory: 'getSummaryHistory', saveSummaryText: 'saveSummaryText', saveSummaryLayout: 'saveSummaryLayout'
   };
 
   /** 画面側の呼び出し名（Googleログイン版と同じ）を、受付窓口の操作に変換する */
@@ -1359,7 +1452,7 @@
       if (fnName === 'getRecords') return res.records || [];
       if (fnName === 'getBootstrap') {
         var p = res.profile || {};
-        return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor,
+        return { ok: true, email: p.email, staffName: p.staffName, staffColor: p.staffColor, role: p.role || '', night: !!res.night,
           targets: res.targets, staffNames: res.staffNames, tags: res.tags, tagColors: res.tagColors, tagCases: res.tagCases, retiredTags: res.retiredTags, programMembers: res.programMembers, programStaff: res.programStaff, caseItems: res.caseItems, canExportCsv: res.canExportCsv, dateKey: res.dateKey, records: res.records };
       }
       return res;
@@ -1414,6 +1507,8 @@
       persistStore();
       progResetForUser();
     }
+    // 利用者のまとめは端末に残さないが、画面の中に前の人の内容が残らないように消す
+    pp.data = null; pp.sel = ''; pp.editing = null; pp.order = null; pp.conflict = null; pp.hist = {};
     token = res.token;
     saveToken(token);
     el.loginForm.reset();
@@ -1518,7 +1613,9 @@
 
     initFontSize();
     initTranscribeMode();
+    initPeople();
     initProgram();
+    applyNightMode();
     initHideMtg();
     initMtgMode();
     initSortOrder();
@@ -1667,6 +1764,7 @@
   function isUserBusy() {
     return !!editingId || commentTyping || !!el.contentInput.value.trim() ||
       (typeof composeImages !== 'undefined' && composeImages.length > 0) ||
+      !!(pp.editing || pp.order) ||
       (el.authView && !el.authView.hidden);
   }
 
@@ -1699,7 +1797,17 @@
       return;
     }
 
+    if (data.role === 'night' || data.night) {
+      // 宿直の職員：利用者のまとめだけ（記録・名簿はサーバーから渡されない）
+      me = { email: data.email, staffName: data.staffName, staffColor: data.staffColor || '', role: 'night' };
+      showComposer();
+      applyNightMode();
+      ppLoad(true).catch(function () { /* 表示は ppLoad が出す */ });
+      return;
+    }
     me = { email: data.email, staffName: data.staffName, staffColor: data.staffColor || '' };
+    applyNightMode();
+    if (appMode === 'people' && !pp.editing && !pp.order) ppLoad(true).catch(function () { /* 表示は ppLoad が出す */ });
     if (data.dateKey === viewDateKey) baseRecords = data.records; // 読み込み中に日付を切り替えた場合は古い日の記録で上書きしない
     persistStore();
 
@@ -1734,6 +1842,7 @@
   function showComposer() {
     el.meRow.innerHTML = '対応者：<strong>' + escapeHtml(me.staffName) + '</strong>';
     el.logoutBtn.hidden = false;
+    if (isNight()) el.meRow.innerHTML = '宿直：<strong>' + escapeHtml(me.staffName) + '</strong>';
     el.composeCard.hidden = viewMode !== 'day';
     updateDateUI();
     restoreComposeDraft();
@@ -1908,7 +2017,7 @@
 
   /** 画面を開いたまま日付が変わったとき、自分で日付を選んでいなければ今日に切り替える */
   function rollOverDayIfNeeded() {
-    if (!me) return;
+    if (!me || isNight()) return;
     if (!progPickedDate && progDateKey !== localDateKey()) changeProgDate(localDateKey(), false);
     if (userPickedDate) return;
     if (viewDateKey !== localDateKey()) changeViewDate(localDateKey(), false);
@@ -1917,6 +2026,7 @@
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(function () {
+      if (isNight()) return;
       rollOverDayIfNeeded();
       flushQueue();
       if (navigator.onLine !== false) refreshFromServer();
@@ -1924,7 +2034,7 @@
   }
 
   function refreshFromServer() {
-    if (!me) return;
+    if (!me || isNight()) return;
     var key = viewDateKey;
     callServer('getRecords', key).then(function (records) {
       if (viewDateKey !== key) return; // 取得中に日付が切り替わった場合は捨てる
@@ -2477,6 +2587,7 @@
   // ---------- 同期キュー ----------
 
   function flushQueue() {
+    if (isNight()) return;
     if (flushing || queue.length === 0) { setSyncStatus(); return; }
     flushing = true;
     setSyncStatus();
@@ -2868,7 +2979,7 @@
   }
 
   function loadHandovers() {
-    if (!me) return Promise.resolve();
+    if (!me || isNight()) return Promise.resolve();
     return callServer('getHandovers', undefined, 60000).then(function (res) {
       handovers = (res && res.records) || [];
       renderHandovers();
@@ -2884,6 +2995,13 @@
     if (!me || refreshing) return;
     refreshing = true;
     el.refreshBtn.classList.add('spinning');
+    if (isNight()) {
+      ppLoad(true).then(function () { showToast('最新の状態にしました'); }, function () { showToast('更新できませんでした（電波を確認してください）'); }).then(function () {
+        refreshing = false;
+        el.refreshBtn.classList.remove('spinning');
+      });
+      return;
+    }
     flushQueue();
     var key = viewDateKey;
     var jobs = [
@@ -2896,6 +3014,7 @@
       loadHandovers()
     ];
     if (appMode === 'prog') { progFlush(); jobs.push(progLoad(true)); }
+    if (appMode === 'people' && !pp.editing && !pp.order) jobs.push(ppLoad(true));
     if (viewMode === 'filter' && lastSearch) {
       var q = lastSearch.q;
       jobs.push(callServer('searchRecords', q, SEARCH_TIMEOUT_MS).then(function (res) {
@@ -4323,7 +4442,7 @@
 
   // ----- 画面 -----
 
-  var appScrollY = { log: 0, prog: 0 }; // 画面ごとのスクロール位置（切り替えて戻ったとき、同じ所から続けられるように）
+  var appScrollY = { log: 0, prog: 0, people: 0 }; // 画面ごとのスクロール位置（切り替えて戻ったとき、同じ所から続けられるように）
 
   /** 切り替えた画面を、前に見ていた位置まで戻す（読み込みで一覧が伸びたら、もう一度合わせる） */
   function restoreAppScroll(loading) {
@@ -4342,10 +4461,13 @@
 
   function setApp(mode, remember) {
     if (isPopout) mode = popoutApp; // 小窓は開いたときの画面に固定
-    var next = mode === 'prog' ? 'prog' : 'log';
+    if (isNight()) mode = 'people'; // 宿直の職員は利用者のまとめだけ
+    var next = mode === 'prog' ? 'prog' : mode === 'people' ? 'people' : 'log';
     if (next !== appMode) appScrollY[appMode] = window.scrollY;
     appMode = next;
     document.body.classList.toggle('app-prog', appMode === 'prog');
+    document.body.classList.toggle('app-people', appMode === 'people');
+    if (el.appPeopleBtn) el.appPeopleBtn.setAttribute('aria-pressed', appMode === 'people' ? 'true' : 'false');
     el.appLogBtn.setAttribute('aria-pressed', appMode === 'log' ? 'true' : 'false');
     el.appProgBtn.setAttribute('aria-pressed', appMode === 'prog' ? 'true' : 'false');
     if (remember) { try { localStorage.setItem(APP_KEY, appMode); } catch (e) { /* 覚えられなくても動く */ } }
@@ -4358,6 +4480,13 @@
       progStartPolling();
       setTimeout(updateTopbarHeight, 0);
       restoreAppScroll(loading);
+    } else if (appMode === 'people') {
+      progStopPolling();
+      ppRender();
+      var ppLoading = ppLoad(true);
+      ppLoading.catch(function () { /* 表示は ppLoad が出す */ });
+      setTimeout(updateTopbarHeight, 0);
+      restoreAppScroll(ppLoading);
     } else {
       progStopPolling();
       setMode(viewMode); // 支援記録の表示（日ごと／絞り込み）を元どおりに（ここで一番上に戻るので、下で位置を戻す）
@@ -4685,7 +4814,7 @@
       if (e.ctrlKey && typing) return;
       if (jumpEntry(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
     });
-    // ショートカット（パソコン）：Alt＋1 支援記録／Alt＋2 プログラム。
+    // ショートカット（パソコン）：Alt＋1 支援記録／Alt＋2 プログラム／Alt＋3 利用者のまとめ。
     // Alt＋4・5 は開いている画面の切り替え（テンキーの並び：1・2 の上の段が 4・5）：支援記録では 日ごと／絞り込み、プログラムでは 午前／午後
     document.addEventListener('keydown', function (e) {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing || !me) return;
@@ -4720,16 +4849,18 @@
         else stepTarget(e.code === 'Period' ? 1 : -1);
         return;
       }
-      var m = /^(?:Digit|Numpad)([1245])$/.exec(e.code || '');
+      var m = /^(?:Digit|Numpad)([12345])$/.exec(e.code || '');
       if (!m) return;
       var n = Number(m[1]);
       e.preventDefault();
       // テンキーの Alt＋数字は、Windows では Alt を離した瞬間に記号（◆など）を入力する。その1文字だけ入らないようにする
       if (/^Numpad/.test(e.code)) { altCharGuard.pending = true; altCharGuard.until = Date.now() + 5000; } // Alt を離したのが分からなくても5秒で解除
-      if (n <= 2) {
+      if (n <= 3) {
         if (isPopout) return; // 小窓は開いたときの画面に固定
-        var to = n === 1 ? 'log' : 'prog';
+        var to = n === 1 ? 'log' : n === 2 ? 'prog' : 'people';
         if (appMode !== to) setApp(to, true);
+      } else if (appMode === 'people') {
+        return;
       } else if (appMode === 'prog') {
         progSwitchSlot(n === 4 ? 'AM' : 'PM');
       } else {
@@ -4919,6 +5050,363 @@
     try { saved = localStorage.getItem(APP_KEY) || 'log'; } catch (e) { /* 既定は支援記録 */ }
     if (isPopout) saved = popoutApp; // 小窓は開いたときの画面
     if (saved === 'prog') setApp('prog', false);
+    else if (saved === 'people') setApp('people', false);
+  }
+
+
+  // ==============================
+  // 利用者のまとめ（👤 利用者）
+  // ==============================
+  // 利用者ごとの最新の支援情報。項目・並び・宿直に見せるかは利用者ごと。保存はすべてサーバーの「履歴」に残り、画面では1日1版にまとめて見せる。
+  // まとめの内容は端末に保存しない（開くたびにサーバーから読む）。
+
+  var PP_SEL_KEY = 'srn.ppSel';           // 最後に開いた利用者（この端末に記憶）
+  var pp = {
+    data: null,        // { members, items: { 名前: [{id,name,night,text,at,by,saves}] }, suggest, kana }
+    loading: null,
+    sel: '',           // 開いている利用者
+    query: '',
+    editing: null,     // { id, baseAt, text, newVer, reason } 内容の編集中
+    conflict: null,    // { id, latest } 先に別の人が直していたとき
+    order: null,       // 項目と並びの編集中 [{ id, name, night }]
+    hist: {},          // 項目ID → { open, loading, list, inter: {} }
+    saving: false
+  };
+
+  function isNight() { return !!(me && me.role === 'night'); }
+
+  function ppEl(id) { return document.getElementById(id); }
+
+  function ppLoad(force) {
+    if (!me) return Promise.resolve();
+    if (pp.loading && !force) return pp.loading;
+    if (!pp.data) ppRender();
+    pp.loading = callServer('getSummary', {}, 60000).then(function (res) {
+      pp.data = res || { members: [], items: {} };
+      if (!pp.sel) { try { pp.sel = localStorage.getItem(PP_SEL_KEY) || ''; } catch (e) { /* 覚えられなくても動く */ } }
+      if (pp.sel && pp.data.members.indexOf(pp.sel) === -1) pp.sel = '';
+      ppRender();
+    }).catch(function (err) {
+      if (!pp.data && !(err && err.code === 'AUTH')) ppEl('ppMain').innerHTML = '<div class="pp-card"><div class="pp-empty">' + escapeHtml(err && !err.isNetwork && !err.isTimeout && err.message ? err.message : '読み込めませんでした。電波の良い場所で「↻ 更新」を押してください。') + '</div></div>';
+      throw err;
+    }).then(function (v) { pp.loading = null; return v; }, function (e) { pp.loading = null; throw e; });
+    return pp.loading;
+  }
+
+  function ppItems(name) { return (pp.data && pp.data.items[name]) || []; }
+
+  function ppAtLabel(at) {
+    var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(at || '');
+    return m ? Number(m[2]) + '/' + Number(m[3]) + ' ' + m[4] + ':' + m[5] : '';
+  }
+  function ppDay(at) { return String(at || '').slice(0, 10); }
+
+  function ppRender() {
+    if (!el.ppSide) return;
+    var night = isNight();
+    var d = pp.data;
+    // 左：利用者の一覧
+    var q = pp.query.replace(/[\s　]/g, '');
+    var kana = (d && d.kana) || {};
+    var list = d ? d.members.filter(function (n) { return !q || n.replace(/[\s　]/g, '').indexOf(q) !== -1 || String(kana[n] || '').indexOf(q) !== -1; }) : [];
+    el.ppList.innerHTML = !d ? '<div class="pp-empty">読み込み中…</div>' : (list.map(function (n) {
+      var items = ppItems(n);
+      var filled = items.filter(function (it) { return it.text; }).length;
+      return '<button type="button" class="pp-member" data-pp-open="' + escapeHtml(n) + '" aria-current="' + (pp.sel === n) + '"><b>' + escapeHtml(n) + '</b>' +
+        '<small>' + (items.length ? escapeHtml(items.map(function (it) { return it.name; }).slice(0, 4).join('・')) + (items.length > 4 ? ' ほか' : '') + (night ? '' : '（' + filled + '/' + items.length + '）') : '項目なし') + '</small></button>';
+    }).join('') || '<div class="pp-empty">見つかりません。</div>');
+    el.ppNightNote.hidden = !night;
+    // 右：選んだ利用者
+    document.body.classList.toggle('pp-open', !!pp.sel);
+    if (!d) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">読み込み中…</div></div>'; return; }
+    if (!pp.sel) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">一覧から利用者を選んでください。</div></div>'; return; }
+    var items = ppItems(pp.sel);
+    var html = '<div class="pp-head"><button type="button" class="pp-back" data-pp-back>← 一覧</button><h1>' + escapeHtml(pp.sel) + '</h1><span class="grow"></span></div>';
+    if (items.length || !night) {
+      html += '<nav class="pp-jump" aria-label="項目へ移動">' + items.map(function (it) {
+        return '<button type="button" data-pp-jump="' + escapeHtml(it.id) + '">' + escapeHtml(it.name) + '</button>';
+      }).join('') + (night ? '' : '<button type="button" class="pp-order-btn" data-pp-order>⇅ 項目と並び</button>') + '</nav>';
+    }
+    if (pp.order) html += ppOrderHtml();
+    if (!items.length) {
+      html += '<div class="pp-card"><div class="pp-empty">' + (night ? 'この利用者のまとめは、まだありません。' : 'まだ項目がありません。「⇅ 項目と並び」から、この人に必要な項目（金銭管理・服薬管理など）を足してください。') + '</div></div>';
+    }
+    html += items.map(ppItemHtml).join('');
+    var y = window.scrollY;
+    el.ppMain.innerHTML = html;
+    window.scrollTo(0, y);
+    var box = document.getElementById('ppEditBox');
+    if (box && !box.dataset.focused) { box.dataset.focused = '1'; bindAutoGrow(box); }
+  }
+
+  function ppItemHtml(it) {
+    var night = isNight();
+    var ed = pp.editing && pp.editing.id === it.id;
+    var h = '<div class="pp-card" id="pp-sec-' + escapeHtml(it.id) + '"><h2>' + escapeHtml(it.name) +
+      (night ? '' : (it.night ? '<span class="pp-badge night">🌙 宿直にも表示</span>' : '<span class="pp-badge">日中の職員だけ</span>')) +
+      '<span class="grow"></span>' + (night || ed ? '' : '<button type="button" class="pp-btn small" data-pp-edit="' + escapeHtml(it.id) + '">✎ 編集</button>') + '</h2>';
+    if (ed) {
+      var e = pp.editing;
+      var today = ppDay(it.at) === localDateKey();
+      h += '<div class="pp-edit"><textarea id="ppEditBox" aria-label="' + escapeHtml(it.name) + 'を編集">' + escapeHtml(e.text) + '</textarea>' +
+        (pp.conflict && pp.conflict.id === it.id ? '<div class="pp-warn">先に ' + escapeHtml(pp.conflict.latest.by || '別の職員') + ' さんが直していました（' + escapeHtml(ppAtLabel(pp.conflict.latest.at)) + '）。いまの内容：\n' + escapeHtml(pp.conflict.latest.text || '（空）') + '\n\nあなたの入力は残しています。見比べて直してから、もう一度「保存」を押してください。</div>' : '') +
+        '<div class="pp-opts">' +
+        (today ? '<label><input type="checkbox" id="ppNewVer"' + (e.newVer ? ' checked' : '') + '> <span>ルールが変わった（今日の版とは別の版にする）<br><span class="pp-note" style="font-weight:500">印なし：誤字直しなどとして今日の版にまとめます。どちらでも保存した内容は全部残ります。</span></span></label>'
+          : '<div class="pp-note">今日はじめての変更なので、新しい版になります。</div>') +
+        '<div><span class="pp-note">変えた理由（任意）</span><input type="text" id="ppReason" maxlength="200" value="' + escapeHtml(e.reason || '') + '" placeholder="例：受診で頓服が変更"></div></div>' +
+        '<div class="pp-row-end"><button type="button" class="pp-btn ghost" data-pp-cancel>やめる</button><button type="button" class="pp-btn primary" data-pp-save="' + escapeHtml(it.id) + '"' + (pp.saving ? ' disabled' : '') + '>' + (pp.saving ? '保存中…' : '保存') + '</button></div></div>';
+    } else {
+      h += it.text ? '<p class="pp-body">' + escapeHtml(it.text) + '</p>' : '<div class="pp-empty">（まだ書かれていません）</div>';
+    }
+    if (it.at) {
+      var hs = pp.hist[it.id];
+      h += '<div class="pp-meta"><span>最終更新 ' + escapeHtml(ppAtLabel(it.at)) + '・' + escapeHtml(it.by) + '</span>' +
+        (night ? '' : '<button type="button" class="pp-link" data-pp-hist="' + escapeHtml(it.id) + '">' + (hs && hs.open ? '履歴を閉じる' : '履歴') + '</button>') + '</div>';
+      if (!night && hs && hs.open) h += ppHistHtml(it.id, hs);
+    }
+    return h + '</div>';
+  }
+
+  // ----- 履歴（1日1版。「ルールが変わった」の保存は同じ日でも別の版） -----
+  function ppVersions(list) {
+    var vs = [];
+    (list || []).forEach(function (e) {
+      var last = vs[vs.length - 1];
+      if (!last || ppDay(last.entries[0].at) !== ppDay(e.at) || e.newVer) vs.push({ entries: [e] });
+      else last.entries.push(e);
+    });
+    vs.forEach(function (v) {
+      v.first = v.entries[0]; v.last = v.entries[v.entries.length - 1];
+      v.reason = v.entries.map(function (e) { return e.reason; }).filter(String).join('／');
+    });
+    return vs;
+  }
+  function ppLineDiff(a, b) {
+    var A = a.split('\n'), B = b.split('\n'), n = A.length, m = B.length, i, j;
+    if (n * m > 40000) return A.map(function (l) { return ['-', l]; }).concat(B.map(function (l) { return ['+', l]; }));
+    var dp = []; for (i = 0; i <= n; i++) { dp.push(new Array(m + 1).fill(0)); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    var out = []; i = 0; j = 0;
+    while (i < n && j < m) { if (A[i] === B[j]) { out.push(['=', A[i]]); i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) out.push(['-', A[i++]]); else out.push(['+', B[j++]]); }
+    while (i < n) out.push(['-', A[i++]]); while (j < m) out.push(['+', B[j++]]);
+    return out;
+  }
+  function ppDiffHtml(prev, cur) {
+    var rows = prev == null ? cur.split('\n').map(function (l) { return ['=', l]; }) : ppLineDiff(prev, cur);
+    return '<div class="pp-diff">' + rows.map(function (r) {
+      return '<div class="pp-dl' + (r[0] === '-' ? ' del' : r[0] === '+' ? ' ins' : '') + '">' + (r[0] === '-' ? '− ' : r[0] === '+' ? '＋ ' : '') + (escapeHtml(r[1]) || '&nbsp;') + '</div>';
+    }).join('') + '</div>';
+  }
+  function ppHistHtml(id, hs) {
+    if (hs.loading) return '<div class="pp-hist"><div class="pp-empty">履歴を読み込み中…</div></div>';
+    if (hs.error) return '<div class="pp-hist"><div class="pp-empty">' + escapeHtml(hs.error) + '</div></div>';
+    var vs = ppVersions(hs.list);
+    var perDay = {};
+    vs.forEach(function (v) { var k = ppDay(v.first.at); perDay[k] = (perDay[k] || 0) + 1; });
+    var out = [];
+    for (var i = vs.length - 1; i >= 0; i--) {
+      var v = vs[i], prev = i > 0 ? vs[i - 1].last.text : null;
+      var people = v.entries.map(function (e) { return e.by; }).filter(function (x, k, a) { return a.indexOf(x) === k; }).join('、');
+      var lab = ppAtLabel(v.first.at);
+      var ik = id + ':' + i;
+      out.push('<div class="pp-ver"><div class="pp-ver-head"><b>' + escapeHtml(perDay[ppDay(v.first.at)] > 1 ? lab : lab.split(' ')[0]) + '</b><span>' + escapeHtml(people) + '</span>' +
+        (i === vs.length - 1 ? '<span class="pp-tag now">いまの版</span>' : '') + (v.first.newVer ? '<span class="pp-tag rule">同じ日にルール変更</span>' : '') + '</div>' +
+        (v.reason ? '<div class="pp-note" style="color:var(--ink)">理由：' + escapeHtml(v.reason) + '</div>' : '') +
+        ppDiffHtml(prev, v.last.text) +
+        (v.entries.length > 1 ? '<button type="button" class="pp-link" data-pp-inter="' + escapeHtml(ik) + '" style="margin-top:6px">' + (hs.inter[ik] ? '途中の変更を閉じる' : 'この日の途中の変更（' + v.entries.length + '回の保存）を見る') + '</button>' +
+          (hs.inter[ik] ? '<div class="pp-inter">' + v.entries.map(function (e, k) {
+            return '<div class="pp-ver"><div class="pp-ver-head"><b>' + escapeHtml(ppAtLabel(e.at).split(' ')[1] || '') + '</b><span>' + escapeHtml(e.by) + '</span></div>' + ppDiffHtml(k === 0 ? prev : v.entries[k - 1].text, e.text) + '</div>';
+          }).join('') + '</div>' : '') : '') +
+        '</div>');
+    }
+    return '<div class="pp-hist">' + (out.join('') || '<div class="pp-empty">履歴はありません。</div>') + '</div>';
+  }
+  function ppToggleHist(id) {
+    var hs = pp.hist[id] = pp.hist[id] || { open: false, inter: {} };
+    hs.open = !hs.open;
+    if (hs.open) {
+      hs.loading = true; hs.error = '';
+      callServer('getSummaryHistory', { target: pp.sel, id: id }, 60000).then(function (res) {
+        hs.list = (res && res.history) || []; hs.loading = false; ppRender();
+      }).catch(function (err) {
+        hs.loading = false; hs.error = (err && err.message && !err.isNetwork && !err.isTimeout) ? err.message : '履歴を読み込めませんでした。'; ppRender();
+      });
+    }
+    ppRender();
+  }
+
+  // ----- 内容の編集 -----
+  function ppStartEdit(id) {
+    var it = ppItems(pp.sel).filter(function (x) { return x.id === id; })[0];
+    if (!it) return;
+    pp.order = null; pp.conflict = null;
+    pp.editing = { id: id, baseAt: it.at, text: it.text, newVer: false, reason: '' };
+    ppRender();
+    var box = document.getElementById('ppEditBox');
+    if (box) { box.focus({ preventScroll: true }); box.setSelectionRange(box.value.length, box.value.length); ppScrollTo(id); }
+  }
+  function ppReadEdit() {
+    var e = pp.editing; if (!e) return;
+    var box = document.getElementById('ppEditBox'), nv = document.getElementById('ppNewVer'), rs = document.getElementById('ppReason');
+    if (box) e.text = box.value;
+    if (nv) e.newVer = nv.checked;
+    if (rs) e.reason = rs.value;
+  }
+  function ppSave() {
+    var e = pp.editing; if (!e || pp.saving) return;
+    ppReadEdit();
+    pp.saving = true; ppRender();
+    var sel = pp.sel;
+    callServer('saveSummaryText', { target: sel, id: e.id, text: e.text, newVer: e.newVer, reason: e.reason, baseAt: e.baseAt }, 60000).then(function (res) {
+      pp.saving = false;
+      if (res && res.conflict) {
+        pp.conflict = { id: e.id, latest: res.latest };
+        e.baseAt = res.latest.at; // 次の保存は、いまの内容を見たうえでの上書きとして受け付ける
+        var it0 = ppItems(sel).filter(function (x) { return x.id === e.id; })[0];
+        if (it0) { it0.text = res.latest.text; it0.at = res.latest.at; it0.by = res.latest.by; }
+        ppRender();
+        return;
+      }
+      var it = ppItems(sel).filter(function (x) { return x.id === e.id; })[0];
+      if (it && res && res.item) { it.text = res.item.text; it.at = res.item.at; it.by = res.item.by; }
+      pp.editing = null; pp.conflict = null;
+      if (pp.hist[e.id]) pp.hist[e.id].open = false;
+      ppRender();
+      showToast(res && res.unchanged ? '変更はありませんでした' : '保存しました');
+    }).catch(function (err) {
+      pp.saving = false; ppRender();
+      showToast(err && err.message && !err.isNetwork && !err.isTimeout ? err.message : '保存できませんでした（電波を確認してください）');
+    });
+  }
+
+  // ----- 項目と並び -----
+  function ppOrderHtml() {
+    var sug = ((pp.data && pp.data.suggest) || []).filter(function (s) { return !pp.order.some(function (o) { return o.name === s; }); });
+    return '<div class="pp-card" id="ppOrderCard" style="border:2px solid var(--accent)"><h2>⇅ ' + escapeHtml(pp.sel) + ' の項目と並び</h2>' +
+      '<div class="pp-note">上にあるほど先に表示されます。名前は直接書きかえられます。「🌙 宿直にも見せる」にチェックした項目だけ、宿直の職員に見えます。項目を消しても、書いた内容の履歴は残ります（同じ名前で足し直すと戻ります）。</div>' +
+      '<div style="margin-top:6px">' + pp.order.map(function (o, i) {
+        return '<div class="pp-order-row"><span class="num">' + (i + 1) + '</span><input type="text" maxlength="30" data-pp-oname="' + i + '" value="' + escapeHtml(o.name) + '" aria-label="' + (i + 1) + '番目の項目の名前">' +
+          '<span class="btns"><button type="button" class="pp-btn small" data-pp-up="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="上へ">↑</button><button type="button" class="pp-btn small" data-pp-down="' + i + '"' + (i === pp.order.length - 1 ? ' disabled' : '') + ' aria-label="下へ">↓</button><button type="button" class="pp-btn small danger" data-pp-del="' + i + '" aria-label="この項目を消す">✕</button></span>' +
+          '<label class="nightchk"><input type="checkbox" data-pp-onight="' + i + '"' + (o.night ? ' checked' : '') + '> 🌙 宿直にも見せる</label></div>';
+      }).join('') + (pp.order.length ? '' : '<div class="pp-empty">まだ項目がありません。下から足してください。</div>') + '</div>' +
+      '<div class="pp-add"><input type="text" id="ppNewItem" maxlength="30" placeholder="新しい項目の名前（例：食事管理）"><button type="button" class="pp-btn" data-pp-add>＋ 足す</button></div>' +
+      (sug.length ? '<div class="pp-suggest">' + sug.map(function (s) { return '<button type="button" data-pp-sug="' + escapeHtml(s) + '">＋ ' + escapeHtml(s) + '</button>'; }).join('') + '</div>' : '') +
+      '<div class="pp-row-end"><button type="button" class="pp-btn ghost" data-pp-ocancel>やめる</button><button type="button" class="pp-btn primary" data-pp-osave' + (pp.saving ? ' disabled' : '') + '>' + (pp.saving ? '保存中…' : 'この並びで保存') + '</button></div></div>';
+  }
+  function ppReadOrder() {
+    if (!pp.order) return;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pp-oname]'), function (inp) { var o = pp.order[Number(inp.dataset.ppOname)]; if (o) o.name = inp.value; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pp-onight]'), function (inp) { var o = pp.order[Number(inp.dataset.ppOnight)]; if (o) o.night = inp.checked; });
+  }
+  function ppSaveOrder() {
+    if (pp.saving) return;
+    ppReadOrder();
+    var items = pp.order.map(function (o) { return { id: o.id || '', name: String(o.name || '').trim(), night: !!o.night }; });
+    if (items.some(function (o) { return !o.name; })) { showToast('名前のない項目があります'); return; }
+    pp.saving = true; ppRender();
+    callServer('saveSummaryLayout', { target: pp.sel, items: items }, 60000).then(function (res) {
+      pp.saving = false; pp.order = null;
+      if (res && res.items) pp.data = res;
+      ppRender();
+      showToast('項目と並びを保存しました');
+    }).catch(function (err) {
+      pp.saving = false; ppRender();
+      showToast(err && err.message && !err.isNetwork && !err.isTimeout ? err.message : '保存できませんでした（電波を確認してください）');
+    });
+  }
+
+  function ppScrollTo(id) {
+    var c = document.getElementById(id === 'order' ? 'ppOrderCard' : 'pp-sec-' + id);
+    if (!c) return;
+    var top = c.getBoundingClientRect().top + window.scrollY - (el.topbar ? el.topbar.offsetHeight : 0) - 56;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  function ppOpen(name) {
+    if (pp.editing || pp.order) { if (!confirm('編集中の内容は保存されません。ほかの利用者を開きますか？')) return; }
+    pp.sel = name; pp.editing = null; pp.order = null; pp.conflict = null; pp.hist = {};
+    try { localStorage.setItem(PP_SEL_KEY, name); } catch (e) { /* 覚えられなくても動く */ }
+    ppRender();
+    window.scrollTo(0, 0);
+  }
+
+  function initPeople() {
+    el.appPeopleBtn = document.getElementById('appPeopleBtn');
+    el.ppSide = document.getElementById('ppSide');
+    el.ppList = document.getElementById('ppList');
+    el.ppMain = document.getElementById('ppMain');
+    el.ppNightNote = document.getElementById('ppNightNote');
+    el.appPeopleBtn.addEventListener('click', function () { if (appMode !== 'people') setApp('people', true); });
+    document.getElementById('ppSearch').addEventListener('input', function (e) { pp.query = e.target.value; ppRender(); });
+    document.getElementById('peopleView').addEventListener('click', function (e) {
+      var t = e.target.closest('button'); if (!t) return;
+      var d = t.dataset;
+      if (d.ppOpen !== undefined) return ppOpen(d.ppOpen);
+      if (d.ppBack !== undefined) {
+        if ((pp.editing || pp.order) && !confirm('編集中の内容は保存されません。一覧に戻りますか？')) return;
+        pp.sel = ''; pp.editing = null; pp.order = null; ppRender(); window.scrollTo(0, 0); return;
+      }
+      if (d.ppJump) return ppScrollTo(d.ppJump);
+      if (isNight()) return; // 宿直は見るだけ
+      if (d.ppEdit) return ppStartEdit(d.ppEdit);
+      if (d.ppCancel !== undefined) { pp.editing = null; pp.conflict = null; ppRender(); return; }
+      if (d.ppSave) return ppSave();
+      if (d.ppHist) return ppToggleHist(d.ppHist);
+      if (d.ppInter) { var hs = pp.hist[d.ppInter.split(':')[0]]; if (hs) { hs.inter[d.ppInter] = !hs.inter[d.ppInter]; ppRender(); } return; }
+      if (d.ppOrder !== undefined) {
+        if (pp.editing && !confirm('編集中の内容は保存されません。項目と並びの編集を開きますか？')) return;
+        pp.editing = null;
+        pp.order = ppItems(pp.sel).map(function (it) { return { id: it.id, name: it.name, night: it.night }; });
+        ppRender(); ppScrollTo('order'); return;
+      }
+      if (d.ppUp !== undefined || d.ppDown !== undefined) {
+        ppReadOrder();
+        var i = Number(d.ppUp !== undefined ? d.ppUp : d.ppDown), j = d.ppUp !== undefined ? i - 1 : i + 1;
+        var tmp = pp.order[i]; pp.order[i] = pp.order[j]; pp.order[j] = tmp;
+        ppRender(); return;
+      }
+      if (d.ppDel !== undefined) {
+        ppReadOrder();
+        var o = pp.order[Number(d.ppDel)];
+        if (o && o.id && !confirm('「' + o.name + '」を消しますか？（書いた内容の履歴は残ります）')) return;
+        pp.order.splice(Number(d.ppDel), 1); ppRender(); return;
+      }
+      if (d.ppAdd !== undefined || d.ppSug) {
+        ppReadOrder();
+        var name = String(d.ppSug || (ppEl('ppNewItem') || {}).value || '').trim();
+        if (!name) { var ni = ppEl('ppNewItem'); if (ni) ni.focus(); return; }
+        if (pp.order.some(function (x) { return x.name === name; })) { showToast('「' + name + '」はもうあります'); return; }
+        pp.order.push({ id: '', name: name, night: false });
+        ppRender(); return;
+      }
+      if (d.ppOcancel !== undefined) { pp.order = null; ppRender(); return; }
+      if (d.ppOsave !== undefined) return ppSaveOrder();
+    });
+    document.getElementById('peopleView').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.id === 'ppNewItem' && !e.isComposing) { e.preventDefault(); var b = document.querySelector('[data-pp-add]'); if (b) b.click(); }
+    });
+    // 入力中の内容は、描き直しても消えないように覚えておく
+    document.getElementById('peopleView').addEventListener('input', function (e) {
+      if (e.target.id === 'ppEditBox' || e.target.id === 'ppReason') ppReadEdit();
+    });
+    document.getElementById('peopleView').addEventListener('change', function (e) {
+      if (e.target.id === 'ppNewVer') ppReadEdit();
+      if (e.target.dataset.ppOnight !== undefined) ppReadOrder();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && appMode === 'people' && !pp.editing && !pp.order) ppLoad(true).catch(function () {});
+    });
+  }
+
+  /** 宿直の職員としてログインしたとき：まとめの画面だけにする（記録・名簿は端末にも残さない） */
+  function applyNightMode() {
+    var night = isNight();
+    document.body.classList.toggle('night', night);
+    if (!night) return;
+    baseRecords = []; queue = []; tempIdMap = {}; staffNameList = [];
+    persistStore();
+    progMembers = []; progStaff = []; progResetForUser();
+    if (appMode !== 'people') setApp('people', false);
   }
 
   function reiwaLabel(key) {
