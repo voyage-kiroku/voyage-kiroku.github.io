@@ -498,8 +498,12 @@
   .pp-back { font-size: .85rem; font-weight: 700; color: var(--accent); padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); }
   .pp-jump { position: sticky; top: var(--topbar-h, 80px); z-index: 5; background: var(--bg); display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin-top: 6px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
   @media (min-width: 900px) { .pp-jump { flex-wrap: wrap; } }
-  .pp-jump button { font-size: .78rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+  .pp-jump button { font-size: .82rem; font-weight: 700; color: var(--accent-soft-ink); background: var(--accent-soft); border: 1px solid transparent; border-radius: 999px; padding: 7px 14px; white-space: nowrap; flex: none; }
+  .pp-jump button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+  .pp-jump button.pp-tab-empty:not([aria-selected="true"]) { background: transparent; border-color: var(--line); color: var(--muted); }
   .pp-jump .pp-order-btn { background: transparent; color: var(--accent); border: 1px dashed var(--accent); }
+  .pp-jump .pp-order-btn[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-style: solid; }
+  .pp-tabpos { margin-top: 6px; font-size: .72rem; color: var(--muted); text-align: right; }
   .pp-btn { font-size: .8rem; font-weight: 700; padding: 6px 14px; border-radius: 999px; background: var(--surface-2); color: var(--ink); }
   .pp-btn.primary { background: var(--accent); color: var(--accent-ink); }
   .pp-btn.small { font-size: .74rem; padding: 4px 11px; }
@@ -963,7 +967,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwncaq44';
+  var APP_BUILD = 'mwo774vc';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -2713,11 +2717,11 @@
    * タグマスタから消えたタグでも、付いていれば外せるように表示する。
    */
   /**
-   * 「朝MTG」はボタンに出さない（付けるのは入力欄右上の「☀ 朝MTG」ボタンだけ）。
-   * 編集では、付いている記録なら外せるように出す。入力欄（isCompose）では付いていても出さない。
+   * 「朝MTG」は入力欄（isCompose）のタグボタンには出さない（付けるのは入力欄右上の「☀ 朝MTG」ボタンだけ）。
+   * 編集では、付け忘れをあとから直せるように、ほかのタグと同じく付け外しできるボタンとして出す。
    */
   function renderTagButtons(row, selected, onChange, isCompose) {
-    var names = tagList.filter(function (t) { return retiredTags.indexOf(t) === -1 && t !== MTG_TAG; });
+    var names = tagList.filter(function (t) { return retiredTags.indexOf(t) === -1 && !(isCompose && t === MTG_TAG); });
     selected.forEach(function (t) { if (names.indexOf(t) === -1 && !(isCompose && t === MTG_TAG)) names.push(t); });
     row.innerHTML = '';
     row.hidden = names.length === 0;
@@ -5070,6 +5074,7 @@
     conflict: null,    // { id, latest } 先に別の人が直していたとき
     order: null,       // 項目と並びの編集中 [{ id, name, night }]
     hist: {},          // 項目ID → { open, loading, list, inter: {} }
+    tab: '',           // 表示している項目（タブ）の ID。空や消えた項目なら先頭
     saving: false
   };
 
@@ -5122,21 +5127,56 @@
     if (!pp.sel) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">一覧からメンバーを選んでください。</div></div>'; return; }
     var items = ppItems(pp.sel);
     var html = '<div class="pp-head"><button type="button" class="pp-back" data-pp-back>← 一覧</button><h1>' + escapeHtml(pp.sel) + '</h1><span class="grow"></span></div>';
+    // 項目はタブで1つずつ表示（編集中はその項目、項目と並びの編集中はその画面）
+    var cur = pp.order ? null : ppCurrentItem(items);
     if (items.length || !night) {
-      html += '<nav class="pp-jump" aria-label="項目へ移動">' + items.map(function (it) {
-        return '<button type="button" data-pp-jump="' + escapeHtml(it.id) + '">' + escapeHtml(it.name) + '</button>';
-      }).join('') + (night ? '' : '<button type="button" class="pp-order-btn" data-pp-order>⇅ 項目と並び</button>') + '</nav>';
+      html += '<nav class="pp-jump" role="tablist" aria-label="項目">' + items.map(function (it) {
+        var on = !!cur && cur.id === it.id;
+        return '<button type="button" role="tab" aria-selected="' + on + '" class="' + (it.text ? '' : 'pp-tab-empty') + '" data-pp-tab="' + escapeHtml(it.id) + '"' + (it.text ? '' : ' title="まだ書かれていません"') + '>' + escapeHtml(it.name) + '</button>';
+      }).join('') + (night ? '' : '<button type="button" role="tab" aria-selected="' + !!pp.order + '" class="pp-order-btn" data-pp-order>⇅ 項目と並び</button>') + '</nav>';
     }
     if (pp.order) html += ppOrderHtml();
-    if (!items.length) {
+    else if (!items.length) {
       html += '<div class="pp-card"><div class="pp-empty">' + (night ? 'このメンバーのまとめは、まだありません。' : 'まだ項目がありません。「⇅ 項目と並び」から、この人に必要な項目（金銭管理・服薬管理など）を足してください。') + '</div></div>';
+    } else {
+      html += ppItemHtml(cur);
+      if (items.length > 1) html += '<div class="pp-tabpos">' + (items.indexOf(cur) + 1) + ' / ' + items.length + ' 項目</div>';
     }
-    html += items.map(ppItemHtml).join('');
     var y = window.scrollY;
+    var tabsOld = el.ppMain.querySelector('.pp-jump');
+    var tabsX = tabsOld ? tabsOld.scrollLeft : 0;
     el.ppMain.innerHTML = html;
     window.scrollTo(0, y);
+    // タブ（横に流れる）の位置を保ち、選んでいるタブが見えるようにする
+    var tabs = el.ppMain.querySelector('.pp-jump');
+    if (tabs) {
+      tabs.scrollLeft = tabsX;
+      var act = tabs.querySelector('[aria-selected="true"]');
+      if (act && (act.offsetLeft < tabs.scrollLeft || act.offsetLeft + act.offsetWidth > tabs.scrollLeft + tabs.clientWidth)) tabs.scrollLeft = act.offsetLeft - 16;
+    }
     var box = document.getElementById('ppEditBox');
     if (box && !box.dataset.focused) { box.dataset.focused = '1'; bindAutoGrow(box); }
+  }
+
+  /** いま表示する項目：編集中ならその項目、なければ選んだタブ、どちらもなければ先頭 */
+  function ppCurrentItem(items) {
+    var want = pp.editing ? pp.editing.id : pp.tab;
+    return items.filter(function (x) { return x.id === want; })[0] || items[0] || null;
+  }
+
+  /** タブを切り替える（編集中なら確かめる） */
+  function ppSelectTab(id) {
+    if (pp.order) { if (!confirm('項目と並びの変更は保存されません。閉じますか？')) return; pp.order = null; }
+    if (pp.editing && pp.editing.id !== id) { if (!confirm('編集中の内容は保存されません。ほかの項目を開きますか？')) return; pp.editing = null; pp.conflict = null; }
+    pp.tab = id;
+    ppRender();
+    // タブより下にいたら、内容の頭が見えるところまで戻す
+    var tabs = el.ppMain.querySelector('.pp-jump');
+    var head = el.topbar ? el.topbar.offsetHeight : 0;
+    if (tabs && window.scrollY > tabs.offsetTop - head) {
+      var c = el.ppMain.querySelector('.pp-card');
+      if (c) window.scrollTo({ top: Math.max(0, c.getBoundingClientRect().top + window.scrollY - head - tabs.offsetHeight - 8) });
+    }
   }
 
   function ppItemHtml(it) {
@@ -5239,7 +5279,7 @@
   function ppStartEdit(id) {
     var it = ppItems(pp.sel).filter(function (x) { return x.id === id; })[0];
     if (!it) return;
-    pp.order = null; pp.conflict = null;
+    pp.order = null; pp.conflict = null; pp.tab = id;
     pp.editing = { id: id, baseAt: it.at, text: it.text, newVer: false, reason: '' };
     ppRender();
     var box = document.getElementById('ppEditBox');
@@ -5324,7 +5364,7 @@
 
   function ppOpen(name) {
     if (pp.editing || pp.order) { if (!confirm('編集中の内容は保存されません。ほかのメンバーを開きますか？')) return; }
-    pp.sel = name; pp.editing = null; pp.order = null; pp.conflict = null; pp.hist = {};
+    pp.sel = name; pp.editing = null; pp.order = null; pp.conflict = null; pp.hist = {}; pp.tab = '';
     try { localStorage.setItem(PP_SEL_KEY, name); } catch (e) { /* 覚えられなくても動く */ }
     ppRender();
     window.scrollTo(0, 0);
@@ -5346,7 +5386,7 @@
         if ((pp.editing || pp.order) && !confirm('編集中の内容は保存されません。一覧に戻りますか？')) return;
         pp.sel = ''; pp.editing = null; pp.order = null; ppRender(); window.scrollTo(0, 0); return;
       }
-      if (d.ppJump) return ppScrollTo(d.ppJump);
+      if (d.ppTab) return ppSelectTab(d.ppTab);
       if (isNight()) return; // 宿直は見るだけ
       if (d.ppEdit) return ppStartEdit(d.ppEdit);
       if (d.ppCancel !== undefined) { pp.editing = null; pp.conflict = null; ppRender(); return; }
@@ -5354,6 +5394,7 @@
       if (d.ppHist) return ppToggleHist(d.ppHist);
       if (d.ppInter) { var hs = pp.hist[d.ppInter.split(':')[0]]; if (hs) { hs.inter[d.ppInter] = !hs.inter[d.ppInter]; ppRender(); } return; }
       if (d.ppOrder !== undefined) {
+        if (pp.order) return;
         if (pp.editing && !confirm('編集中の内容は保存されません。項目と並びの編集を開きますか？')) return;
         pp.editing = null;
         pp.order = ppItems(pp.sel).map(function (it) { return { id: it.id, name: it.name, night: it.night }; });
