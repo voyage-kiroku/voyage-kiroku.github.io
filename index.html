@@ -714,10 +714,10 @@
   <div class="topbar">
     <div class="brand-row">
       <h1 class="brand sr-only">ボヤージュ支援記録ノート</h1>
-      <div class="app-switch" role="group" aria-label="支援記録・プログラム記録・利用者のまとめの切り替え">
+      <div class="app-switch" role="group" aria-label="支援記録・プログラム記録・メンバーのまとめの切り替え">
         <button type="button" class="app-btn" id="appLogBtn" aria-pressed="true" title="支援記録（Alt＋1）">📝 支援記録</button>
         <button type="button" class="app-btn" id="appProgBtn" aria-pressed="false" title="プログラム（Alt＋2）">✅ プログラム</button>
-        <button type="button" class="app-btn" id="appPeopleBtn" aria-pressed="false" title="利用者のまとめ（Alt＋3）">👤 利用者</button>
+        <button type="button" class="app-btn" id="appPeopleBtn" aria-pressed="false" title="メンバーのまとめ（Alt＋3）">👤 メンバー</button>
       </div>
     </div>
     <div class="date-nav" id="dateNav">
@@ -776,9 +776,9 @@
   <div id="peopleView">
     <div class="pp-grid">
       <aside class="pp-side" id="ppSide">
-        <div class="pp-night-note" id="ppNightNote" hidden>🌙 宿直用の画面です。利用者のまとめを見ることだけできます。</div>
+        <div class="pp-night-note" id="ppNightNote" hidden>🌙 宿直用の画面です。メンバーのまとめを見ることだけできます。</div>
         <div class="pp-card">
-          <input type="search" class="pp-search" id="ppSearch" placeholder="名前・ふりがなで探す" aria-label="利用者を探す">
+          <input type="search" class="pp-search" id="ppSearch" placeholder="名前・ふりがなで探す" aria-label="メンバーを探す">
           <div id="ppList" style="margin-top:8px"></div>
         </div>
       </aside>
@@ -833,7 +833,7 @@
     <div class="draft-note" id="draftNote" role="status" hidden></div>
     <div class="field-row">
       <div>
-        <label class="hint" for="targetSelect">対象者（利用者）</label>
+        <label class="hint" for="targetSelect">対象者（メンバー）</label>
         <select id="targetSelect" title="Alt＋．で次の人、Alt＋，で前の人（名簿順）"></select>
       </div>
       <div>
@@ -888,7 +888,7 @@
       </div>
     </div>
     <p class="filter-note">期間は約3か月（93日）まで指定できます。</p>
-    <label class="hint" for="fTarget">対象者（利用者）</label>
+    <label class="hint" for="fTarget">対象者（メンバー）</label>
     <select id="fTarget"></select>
     <label class="hint" for="fStaff">記録者（職員）</label>
     <select id="fStaff"></select>
@@ -937,9 +937,9 @@
   <p class="empty" id="emptyMsg" hidden>まだ記録がありません。今日最初の記録を書いてみましょう。</p>
 
   <div class="result-pager" id="resultPager" hidden>
-    <button type="button" class="nav-btn" id="pagerPrev" aria-label="前の利用者" title="前の利用者（Alt＋，）">‹</button>
-    <select id="pagerSelect" aria-label="表示する利用者"></select>
-    <button type="button" class="nav-btn" id="pagerNext" aria-label="次の利用者" title="次の利用者（Alt＋．）">›</button>
+    <button type="button" class="nav-btn" id="pagerPrev" aria-label="前のメンバー" title="前のメンバー（Alt＋，）">‹</button>
+    <select id="pagerSelect" aria-label="表示するメンバー"></select>
+    <button type="button" class="nav-btn" id="pagerNext" aria-label="次のメンバー" title="次のメンバー（Alt＋．）">›</button>
   </div>
   <p class="result-summary" id="resultSummary" hidden></p>
   <div id="results" hidden></div>
@@ -963,7 +963,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwmzb22k';
+  var APP_BUILD = 'mwncaq44';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -3918,7 +3918,7 @@
     el.pagerSelect.innerHTML = '';
     var all = document.createElement('option');
     all.value = '';
-    all.textContent = 'すべての利用者（' + lastSearch.records.length + '件' + (openAll ? '・未申し送り' + openAll : '') + '）';
+    all.textContent = 'すべてのメンバー（' + lastSearch.records.length + '件' + (openAll ? '・未申し送り' + openAll : '') + '）';
     el.pagerSelect.appendChild(all);
     names.forEach(function (t) {
       var o = document.createElement('option');
@@ -4684,20 +4684,20 @@
   function stepPagerKey(dir) {
     var names = pagerOptions();
     if (el.resultPager.hidden || !names.length) {
-      showToast('利用者ごとにめくれるのは、対象者を「すべて」にして絞り込んだときです');
+      showToast('メンバーごとにめくれるのは、対象者を「すべて」にして絞り込んだときです');
       return;
     }
     var i = pagerTarget ? names.indexOf(pagerTarget) : -1, next = i + dir;
     while (next >= 0 && next < names.length && isVacantRoom(names[next])) next += dir;
-    if (next >= names.length) { showToast('最後の利用者です'); return; }
+    if (next >= names.length) { showToast('最後のメンバーです'); return; }
     if (next < 0) {
-      if (i === -1) { showToast('「すべての利用者」を表示しています'); return; }
+      if (i === -1) { showToast('「すべてのメンバー」を表示しています'); return; }
       showPagerTarget('');
     } else {
       showPagerTarget(names[next]);
     }
     flashOnce(el.pagerSelect);
-    showToast(pagerTarget ? '表示：' + pagerTarget : 'すべての利用者');
+    showToast(pagerTarget ? '表示：' + pagerTarget : 'すべてのメンバー');
   }
 
   function progSwitchSlot(slot) {
@@ -5119,7 +5119,7 @@
     // 右：選んだ利用者
     document.body.classList.toggle('pp-open', !!pp.sel);
     if (!d) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">読み込み中…</div></div>'; return; }
-    if (!pp.sel) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">一覧から利用者を選んでください。</div></div>'; return; }
+    if (!pp.sel) { el.ppMain.innerHTML = '<div class="pp-card"><div class="pp-empty">一覧からメンバーを選んでください。</div></div>'; return; }
     var items = ppItems(pp.sel);
     var html = '<div class="pp-head"><button type="button" class="pp-back" data-pp-back>← 一覧</button><h1>' + escapeHtml(pp.sel) + '</h1><span class="grow"></span></div>';
     if (items.length || !night) {
@@ -5129,7 +5129,7 @@
     }
     if (pp.order) html += ppOrderHtml();
     if (!items.length) {
-      html += '<div class="pp-card"><div class="pp-empty">' + (night ? 'この利用者のまとめは、まだありません。' : 'まだ項目がありません。「⇅ 項目と並び」から、この人に必要な項目（金銭管理・服薬管理など）を足してください。') + '</div></div>';
+      html += '<div class="pp-card"><div class="pp-empty">' + (night ? 'このメンバーのまとめは、まだありません。' : 'まだ項目がありません。「⇅ 項目と並び」から、この人に必要な項目（金銭管理・服薬管理など）を足してください。') + '</div></div>';
     }
     html += items.map(ppItemHtml).join('');
     var y = window.scrollY;
@@ -5323,7 +5323,7 @@
   }
 
   function ppOpen(name) {
-    if (pp.editing || pp.order) { if (!confirm('編集中の内容は保存されません。ほかの利用者を開きますか？')) return; }
+    if (pp.editing || pp.order) { if (!confirm('編集中の内容は保存されません。ほかのメンバーを開きますか？')) return; }
     pp.sel = name; pp.editing = null; pp.order = null; pp.conflict = null; pp.hist = {};
     try { localStorage.setItem(PP_SEL_KEY, name); } catch (e) { /* 覚えられなくても動く */ }
     ppRender();
