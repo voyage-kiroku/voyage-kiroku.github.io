@@ -611,6 +611,19 @@
   .pg-who { flex: none; font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .pg-who.pg-sending { color: var(--pending); }
   .pg-inline { flex: none; display: flex; gap: 4px; margin-left: 4px; } /* 名前のすぐ右に並べる */
+  /* 選択制プログラム：名前の右に2つのプログラムのボタン。〇・△で未選択のときは目立たせる */
+  .pg-inline .pg-chip.choice[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .pg-inline.need .pg-chip.choice { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+  .pg-inline .pg-chip.choice { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* △の理由は、選択制のときだけ2段目の左に小さく */
+  .pg-rs2 { display: inline-flex; gap: 3px; margin-right: 6px; vertical-align: 1px; }
+  .pg-rs2 .pg-chip { font-size: .68rem; line-height: 1.2; padding: 1px 8px; }
+  .pg-choice-toggle { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: .84rem; font-weight: 700; color: var(--ink); cursor: pointer; }
+  .pg-choice-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .pg-choice-box { display: grid; gap: 6px; margin-top: 6px; }
+  .pg-choice-note { font-size: .72rem; color: var(--muted); margin: 0; }
+  #pgInfo.choice-on #pgProgName, #pgInfo.choice-on label[for="pgProgName"] { display: none; }
+  .pg-cnt.need b { color: var(--danger); }
   .pg-inline .pg-chip { font-size: .76rem; line-height: 1.3; padding: 3px 10px; }
   @media (max-width: 419px) { .pg-inline { gap: 3px; } .pg-inline .pg-chip { font-size: .72rem; padding: 3px 7px; } }
   .pg-preview { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; color: var(--muted); margin-top: 2px; }
@@ -803,6 +816,12 @@
             <label class="hint" for="pgProgName">プログラム名（候補から選ぶか、そのまま入力）</label>
             <input type="text" class="pg-input" id="pgProgName" list="pgProgList" autocomplete="off" enterkeyhint="done" placeholder="例）軽作業">
             <datalist id="pgProgList"></datalist>
+            <label class="pg-choice-toggle"><input type="checkbox" id="pgChoiceOn"> 選択制（2つのプログラムから選ぶ）</label>
+            <div class="pg-choice-box" id="pgChoiceBox" hidden>
+              <input type="text" class="pg-input pg-choice-in" id="pgChoice1" list="pgProgList" autocomplete="off" enterkeyhint="next" maxlength="50" placeholder="プログラム1（例：図書館）" aria-label="選択制のプログラム1">
+              <input type="text" class="pg-input pg-choice-in" id="pgChoice2" list="pgProgList" autocomplete="off" enterkeyhint="done" maxlength="50" placeholder="プログラム2（例：脳トレ）" aria-label="選択制のプログラム2">
+              <p class="pg-choice-note">一覧の名前の右に2つのボタンが出ます。押すと〇も一緒に付きます。</p>
+            </div>
             <label class="hint">担当職員（タップで選ぶ）</label>
             <div class="pg-chips" id="pgStaff"></div>
             <div class="pg-done-row"><button type="button" class="pg-btn" id="pgInfoDone">閉じる</button></div>
@@ -967,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwo774vc';
+  var APP_BUILD = 'mwocl1oz';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4181,7 +4200,14 @@
 
   function progKey(slot, target) { return slot + '|' + target; }
   function progNeedsText(mark, reason) { return mark === '△' || (mark === '／' && reason === 'その他'); }
-  function emptySlot() { return { prog: '', staff: [], review: '', by: '', at: '' }; }
+  function emptySlot() { return { prog: '', choices: [], staff: [], review: '', by: '', at: '' }; }
+  // 選択制プログラム：枠に2つの選択肢があるとき。〇・△の人は参加したプログラム（choice）を選ぶ
+  var PROG_CHOICE_MARKS = ['〇', '△'];
+  function progIsChoice(s) { return !!(s && s.choices && s.choices.length === 2); }
+  /** CSV・印刷に出すプログラム名（選択制で選んでいれば選んだもの、それ以外は枠のプログラム名） */
+  function progNameFor(s, r) { return (progIsChoice(s) && r && r.choice) ? r.choice : ((s && s.prog) || ''); }
+  /** 選択制で、〇・△なのにプログラムを選んでいない */
+  function progChoiceMissing(s, r) { return progIsChoice(s) && PROG_CHOICE_MARKS.indexOf(r.mark) !== -1 && s.choices.indexOf(r.choice) === -1; }
 
   function progLoadStore() {
     try {
@@ -4213,10 +4239,13 @@
     if (f.reason !== undefined) r.reason = f.reason;
     if (f.reasonText !== undefined) r.reasonText = f.reasonText;
     if (f.memo !== undefined) r.memo = f.memo;
+    if (f.choice !== undefined) r.choice = f.choice;
+    if (PROG_CHOICE_MARKS.indexOf(r.mark) === -1) r.choice = ''; // ／・空のときは参加プログラムなし（サーバーと同じ）
   }
   function applySlotFields(s, f) {
     f = f || {};
     if (f.prog !== undefined) s.prog = f.prog;
+    if (f.choices !== undefined) s.choices = f.choices.slice();
     if (f.staff !== undefined) s.staff = f.staff.slice();
     if (f.review !== undefined) s.review = f.review;
   }
@@ -4227,7 +4256,7 @@
     var slots = {};
     ['AM', 'PM'].forEach(function (k) {
       var src = (d.slots && d.slots[k]) || emptySlot();
-      slots[k] = { prog: src.prog || '', staff: (src.staff || []).slice(), review: src.review || '', by: src.by || '', at: src.at || '' };
+      slots[k] = { prog: src.prog || '', choices: (src.choices || []).slice(), staff: (src.staff || []).slice(), review: src.review || '', by: src.by || '', at: src.at || '' };
     });
     var rows = {}, order = [];
     (d.rows || []).forEach(function (r) {
@@ -4424,7 +4453,7 @@
       (prev.rows || []).forEach(function (r) { old[progKey(r.slot, r.target)] = r; });
       (res.rows || []).forEach(function (r) {
         var k = progKey(r.slot, r.target), o = old[k];
-        var changed = !o || o.mark !== r.mark || o.reason !== r.reason || o.reasonText !== r.reasonText || o.memo !== r.memo;
+        var changed = !o || o.mark !== r.mark || o.reason !== r.reason || o.reasonText !== r.reasonText || o.memo !== r.memo || (o.choice || '') !== (r.choice || '');
         if (changed && r.by && r.by !== me.staffName) prog.flash[k] = true;
       });
     }
@@ -4525,8 +4554,39 @@
     return '<span class="pg-badge ' + (r.mark === '△' ? 'late' : 'absent') + '">' + escapeHtml(label) + '</span>';
   }
 
-  function progRowHtml(name, r) {
+  /** 選択制の枠：名前の右に2つのプログラムのボタン（空・〇・△の行。空の行で押すと〇も付く） */
+  function progChoiceHtml(s, r) {
+    if (!progIsChoice(s) || r.mark === '／') return '';
+    return '<span class="pg-inline' + (progChoiceMissing(s, r) ? ' need' : '') + '">' + s.choices.map(function (x) {
+      return '<button type="button" class="pg-chip choice" data-choice="' + escapeHtml(x) + '" aria-pressed="' + (r.choice === x) + '" title="' + escapeHtml(x) + 'に参加">' + escapeHtml(x) + '</button>';
+    }).join('') + '</span>';
+  }
+  /** 選択制の△：理由（遅刻・早退）は2段目の左に小さく出す（1段目はプログラムのボタンで埋まるため） */
+  function progReasonLine2Html(r) {
+    return '<span class="pg-rs2">' + PROG_REASONS['△'].map(function (x) {
+      return '<button type="button" class="pg-chip" data-reason="' + x + '" aria-pressed="' + (r.reason === x) + '">' + x + '</button>';
+    }).join('') + '</span>';
+  }
+
+  /** 選択制の枠：プログラムごとの人数と、選んでいない〇・△の人数（集計の段の最後に） */
+  function progChoiceCountHtml(v, slot, s, list) {
+    var n = {}, miss = 0;
+    s.choices.forEach(function (x) { n[x] = 0; });
+    list.forEach(function (name) {
+      var r = progRowOf(v, slot, name);
+      if (PROG_CHOICE_MARKS.indexOf(r.mark) === -1) return;
+      if (n[r.choice] !== undefined) n[r.choice]++; else miss++;
+    });
+    return s.choices.map(function (x) { return '<span class="pg-cnt">' + escapeHtml(x) + ' <b>' + n[x] + '</b></span>'; }).join('') +
+      (miss ? '<span class="pg-cnt need">プログラム未選択 <b>' + miss + '</b></span>' : '');
+  }
+
+  function progRowHtml(name, r, s) {
     var k = progKey(prog.slot, name), open = prog.open === name;
+    var choiceMode = progIsChoice(s);
+    // 1段目の右：選択制ならプログラムのボタン（／は欠席の理由）、そうでなければ△／の理由
+    var inline1 = choiceMode ? (r.mark === '／' ? (open ? '' : progInlineReasonsHtml(r)) : progChoiceHtml(s, r)) : (open ? '' : progInlineReasonsHtml(r));
+    var line2 = (choiceMode && r.mark === '△' && !open) ? progReasonLine2Html(r) : '';
     var draft = prog.drafts[k] || {};
     var whoCls = 'pg-who' + (r._pending ? ' pg-sending' : '');
     var who = r._pending ? '送信待ち' : (r.by ? escapeHtml(r.by) + (r.at ? ' ' + escapeHtml(r.at) : '') : '');
@@ -4534,8 +4594,8 @@
       '<button type="button" class="pg-mark" data-m="' + r.mark + '" aria-label="' + escapeHtml(progSplitName(name).name) + 'の出欠：' + (r.mark || '未記入') + '">' + r.mark + '</button>' +
       '<div class="pg-body"><div class="pg-head">' + (progSplitName(name).room ? '<span class="pg-room">' + escapeHtml(progSplitName(name).room) + '</span>' : '') + '<span class="pg-name">' + escapeHtml(progSplitName(name).name) + '</span>' +
       (r.temp ? '<span class="pg-temp">臨時</span>' : '') +
-      (open ? '' : progInlineReasonsHtml(r)) + '</div>' + // 理由のボタンは名前と同じ段の右側（行の高さを変えない）
-      '<div class="pg-preview' + (r.memo ? ' has' : '') + '"><span class="pg-pv-text">' + progBadgeHtml(r, open) +
+      inline1 + '</div>' + // 理由・プログラムのボタンは名前と同じ段の右側（行の高さを変えない）
+      '<div class="pg-preview' + (r.memo ? ' has' : '') + '"><span class="pg-pv-text">' + line2 + progBadgeHtml(r, open) +
       (r.memo ? escapeHtml(r.memo) : '＋ 様子・対応を書く') + '</span><span class="' + whoCls + '">' + who + '</span></div></div>';
     if (open) {
       html += '<div class="pg-edit">';
@@ -4579,8 +4639,18 @@
     // 枠の情報（決まったら1行に畳む）
     var infoKey = prog.dateKey + '|' + slot;
     if (prog.data && prog.infoKey !== infoKey) { prog.infoKey = infoKey; el.pgInfo.open = !s.prog; }
+    // 選択制：スイッチと2つの欄（書いている途中は上書きしない。オンにしたばかりで未入力のあいだも開いたまま）
+    var choiceOn = progIsChoice(s) || prog.choiceDraft === infoKey;
+    if (el.pgChoiceOn) {
+      el.pgChoiceOn.checked = choiceOn;
+      el.pgChoiceBox.hidden = !choiceOn;
+      el.pgInfo.classList.toggle('choice-on', choiceOn);
+      if (document.activeElement !== el.pgChoice1 && document.activeElement !== el.pgChoice2 && prog.choiceDraft !== infoKey) {
+        el.pgChoice1.value = s.choices[0] || ''; el.pgChoice2.value = s.choices[1] || '';
+      }
+    }
     el.pgInfoText.innerHTML = s.prog
-      ? '<b>' + escapeHtml(s.prog) + '</b>　<span class="pg-sub">担当：' + (s.staff.length ? escapeHtml(s.staff.join('・')) : 'なし') + '</span>'
+      ? (progIsChoice(s) ? '<span class="pg-sub">選択制：</span>' : '') + '<b>' + escapeHtml(progIsChoice(s) ? s.choices.join('／') : s.prog) + '</b>　<span class="pg-sub">担当：' + (s.staff.length ? escapeHtml(s.staff.join('・')) : 'なし') + '</span>'
       : '<span class="pg-empty">プログラム名が未入力です</span>' + (s.staff.length ? '　<span class="pg-sub">担当：' + escapeHtml(s.staff.join('・')) + '</span>' : '');
     if (document.activeElement !== el.pgProgName) el.pgProgName.value = s.prog;
     var names = progHistoryNames();
@@ -4604,7 +4674,8 @@
       '<span class="pg-sum-break"></span>' +
       '<span class="pg-tot"><span class="pg-tot-slot">' + PROG_SLOT_LABEL[slot] + '　</span>' + list.length + '名</span>' +
       '<span class="pg-cnt">〇参加 <b>' + c['〇'] + '</b></span><span class="pg-cnt">△遅刻・早退 <b>' + c['△'] + '</b></span>' +
-      '<span class="pg-cnt">／欠席 <b>' + c['／'] + '</b></span><span class="pg-cnt">未記入 <b>' + c[''] + '</b></span>';
+      '<span class="pg-cnt">／欠席 <b>' + c['／'] + '</b></span><span class="pg-cnt">未記入 <b>' + c[''] + '</b></span>' +
+      (progIsChoice(s) ? progChoiceCountHtml(v, slot, s, list) : '');
 
     // 振り返り
     if (document.activeElement !== el.pgReview && !prog.reviewDirty) el.pgReview.value = s.review;
@@ -4618,7 +4689,7 @@
     if (!prog.data && !v.order.length) {
       html = '<p class="pg-loading">' + (loadFailed ? '読み込めませんでした。電波の良い場所で「↻ 更新」を押してください。' : '読み込み中…') + '</p>';
     } else {
-      html = list.length ? list.map(function (n) { return progRowHtml(n, progRowOf(v, slot, n)); }).join('')
+      html = list.length ? list.map(function (n) { return progRowHtml(n, progRowOf(v, slot, n), s); }).join('')
         : '<p class="pg-empty-list">プログラムの名簿がまだありません。管理者が利用者マスタのB列「プログラム（並び順）」に数字を入れると、ここに並びます。</p>';
       // 臨時の参加者：名前を自由に入力して追加（何人でも）。利用者マスタの名前は候補として出す（空き部屋・体験者・業務連絡などは出さない）
       var others = targetList.filter(function (t) { return list.indexOf(t) === -1 && !/^\d+[\s　]*$/.test(t) && !/体験者|業務連絡|申し送り/.test(t); });
@@ -4893,6 +4964,47 @@
       renderProgram();
     });
     el.pgProgName.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); el.pgProgName.blur(); } });
+
+    // 選択制プログラム：スイッチと2つの欄。2つとも入ったら保存（プログラム名は「1/2」）
+    el.pgChoiceOn = document.getElementById('pgChoiceOn');
+    el.pgChoiceBox = document.getElementById('pgChoiceBox');
+    el.pgChoice1 = document.getElementById('pgChoice1');
+    el.pgChoice2 = document.getElementById('pgChoice2');
+    var saveChoices = function () {
+      var a = el.pgChoice1.value.trim(), b = el.pgChoice2.value.trim();
+      if (!a || !b) return; // 2つそろうまでは保存しない
+      if (a === b) { showToast('2つのプログラムは違う名前にしてください'); return; }
+      var s = progView().slots[prog.slot];
+      if (progIsChoice(s) && s.choices[0] === a && s.choices[1] === b) { prog.choiceDraft = null; return; }
+      rememberProgName(a); rememberProgName(b);
+      prog.choiceDraft = null;
+      progEnqueue('slot', { slot: prog.slot, fields: { choices: [a, b], prog: a + '/' + b } });
+      renderProgram();
+    };
+    el.pgChoiceOn.addEventListener('change', function () {
+      var key = prog.dateKey + '|' + prog.slot, s = progView().slots[prog.slot];
+      if (el.pgChoiceOn.checked) {
+        prog.choiceDraft = key;
+        // 今のプログラム名が「A/B」なら、2つの欄に分けて入れておく
+        var parts = String(s.prog || '').split(/[\/／]/).map(function (x) { return x.trim(); }).filter(String);
+        el.pgChoice1.value = parts.length === 2 ? parts[0] : '';
+        el.pgChoice2.value = parts.length === 2 ? parts[1] : '';
+        renderProgram();
+        if (parts.length === 2) saveChoices(); else el.pgChoice1.focus();
+      } else {
+        prog.choiceDraft = null;
+        if (progIsChoice(s)) progEnqueue('slot', { slot: prog.slot, fields: { choices: [] } }); // 記録した参加プログラムは残す（もう一度オンにすれば戻る）
+        renderProgram();
+      }
+    });
+    [el.pgChoice1, el.pgChoice2].forEach(function (inp, i) {
+      inp.addEventListener('change', saveChoices);
+      inp.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        if (i === 0) el.pgChoice2.focus(); else inp.blur();
+      });
+    });
     el.pgStaff.addEventListener('click', function (e) {
       var b = e.target.closest('[data-staff]');
       if (!b) return;
@@ -4979,6 +5091,15 @@
         if (prog.drafts[k]) delete prog.drafts[k].reasonText; // 理由は選び直し
         // 印を付けても記入欄は自動で開かない（理由や内容は、名前の部分をタップして開いたときに書く）
         if (next !== '△' && next !== '／' && prog.open === name && !(prog.drafts[k] && prog.drafts[k].memo !== undefined)) progCloseRow(name);
+        renderProgram();
+        return;
+      }
+      var cc = e.target.closest('[data-choice]');
+      if (cc) { // 選択制：参加したプログラムを選ぶ（空の行なら〇も一緒に付ける。同じものをもう一度押すと選び直し）
+        var ch = cc.dataset.choice, cf = {};
+        if (PROG_CHOICE_MARKS.indexOf(r.mark) === -1) { cf.mark = '〇'; cf.choice = ch; }
+        else cf.choice = r.choice === ch ? '' : ch;
+        progEnqueue('row', { slot: prog.slot, target: name, fields: cf });
         renderProgram();
         return;
       }
@@ -5474,17 +5595,24 @@
       var v = progView(), dk = prog.dateKey || viewDateKey;
       function cell(x) { x = String(x == null ? '' : x); return /[",\r\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
       var lines = [['日付', '枠', 'プログラム名', '利用者ID', '利用者名', '臨時', '出欠', '理由'].join(',')];
+      var missing = { AM: 0, PM: 0 }; // 選択制で、〇・△なのにプログラムを選んでいない人
       ['AM', 'PM'].forEach(function (slot) {
-        var prName = (v.slots[slot] && v.slots[slot].prog) || '';
+        var s = v.slots[slot] || emptySlot();
         progNames(v, slot).forEach(function (name) {
           var r = v.rows[progKey(slot, name)];
           if (!r) return; // シートに行がない（まだ何も付けていない）人は出さない
+          if (progChoiceMissing(s, r)) missing[slot]++;
           var m = /^(\d+)[\s　]*(.*)$/.exec(String(name).trim());
-          lines.push([dk.replace(/-/g, ''), slot, prName, m ? m[1] : '', (m ? m[2] : String(name)).trim(),
+          // プログラム名：選択制で選んでいれば選んだプログラム、それ以外は枠のプログラム名（選択制なら「1/2」）
+          lines.push([dk.replace(/-/g, ''), slot, progNameFor(s, r), m ? m[1] : '', (m ? m[2] : String(name)).trim(),
             r.temp ? 'TRUE' : 'FALSE', r.mark || '', r.reason || ''].map(cell).join(','));
         });
       });
       if (lines.length === 1) { showToast('この日の参加記録がありません'); return; }
+      if (missing.AM + missing.PM) {
+        var where = (missing.AM ? '午前 ' + missing.AM + '人' : '') + (missing.AM && missing.PM ? '・' : '') + (missing.PM ? '午後 ' + missing.PM + '人' : '');
+        if (!window.confirm('選択制のプログラムで、参加したプログラムを選んでいない人がいます（' + where + '）。\nこの人たちのプログラム名は2つをつないだ名前になります。このまま書き出しますか？')) return;
+      }
       downloadCsv('program_' + dk.replace(/-/g, '') + '.csv', lines.join('\r\n') + '\r\n');
       var pend = progQueue.some(function (q) { return q.payload && q.payload.dateKey === dk; });
       showToast('見聞録用プログラムCSVを書き出しました（' + (lines.length - 1) + '行）' + (pend ? '。送信待ちの変更も含んでいます' : ''));
@@ -5505,10 +5633,11 @@
           reason = '【' + (r.mark === '△' ? (r.reason || '遅刻・早退') : '欠席' + (r.reason ? '・' + r.reason : '')) +
             (progNeedsText(r.mark, r.reason) && r.reasonText ? '：' + r.reasonText : '') + '】';
         }
-        return '<tr><td class="mk">' + r.mark + '</td><td>' + escapeHtml(progSplitName(n).name) + (r.temp ? '（臨時）' : '') + '</td><td>' + escapeHtml(reason + (r.memo || '')) + '</td></tr>';
+        var pick = (progIsChoice(s) && r.choice) ? '［' + r.choice + '］' : ''; // 選択制：参加したプログラム
+        return '<tr><td class="mk">' + r.mark + '</td><td>' + escapeHtml(progSplitName(n).name) + (r.temp ? '（臨時）' : '') + '</td><td>' + escapeHtml(pick + reason + (r.memo || '')) + '</td></tr>';
       }).join('');
       return '<section class="pp-sec"><div class="pp-hd"><b>プログラム記録</b><span>' + escapeHtml(reiwaLabel(prog.dateKey)) + '</span></div>' +
-        '<div class="pp-meta"><span>プログラム名：</span><span>' + escapeHtml(s.prog) + '　（' + (slot === 'AM' ? 'ＡＭ' : 'ＰＭ') + '）</span>' +
+        '<div class="pp-meta"><span>プログラム名：</span><span>' + escapeHtml(progIsChoice(s) ? '選択制（' + s.choices.join('／') + '）' : s.prog) + '　（' + (slot === 'AM' ? 'ＡＭ' : 'ＰＭ') + '）</span>' +
         '<span>職員名：</span><span>' + escapeHtml(s.staff.join('・')) + '</span>' +
         '<span>記録者：</span><span>' + escapeHtml(recorders.join('・')) + '</span></div>' +
         '<table><colgroup><col style="width:3em"><col style="width:7em"><col></colgroup>' +
