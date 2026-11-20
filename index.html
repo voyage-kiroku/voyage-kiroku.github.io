@@ -986,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwocl1oz';
+  var APP_BUILD = 'mwolra7h';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -1459,7 +1459,7 @@
 
   var FN_TO_ACTION = {
     getBootstrap: 'bootstrap', getRecords: 'getRecords', addRecord: 'addRecord', updateRecord: 'updateRecord',
-    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramSlot: 'saveProgramSlot', exportKenbunCsv: 'exportKenbunCsv', markTranscribedBulk: 'markTranscribedBulk',
+    deleteRecord: 'deleteRecord', toggleTranscribed: 'toggleTranscribed', searchRecords: 'searchRecords', uploadImage: 'uploadImage', getImage: 'getImage', getHandovers: 'getHandovers', setHandoverDone: 'setHandoverDone', addComment: 'addComment', updateComment: 'updateComment', deleteComment: 'deleteComment', getProgram: 'getProgram', saveProgramRow: 'saveProgramRow', saveProgramRows: 'saveProgramRows', saveProgramSlot: 'saveProgramSlot', exportKenbunCsv: 'exportKenbunCsv', markTranscribedBulk: 'markTranscribedBulk',
     getSummary: 'getSummary', getSummaryHistory: 'getSummaryHistory', saveSummaryText: 'saveSummaryText', saveSummaryLayout: 'saveSummaryLayout'
   };
 
@@ -4194,7 +4194,7 @@
     drafts: {},          // 書きかけ（'AM|名前' → { memo, reasonText }）
     memoBase: {},        // メモ欄を開いたときのメモ（同時編集の見分け用）
     reviewBase: null, reviewDirty: false,
-    infoKey: '', timer: null, flushing: false, sending: null,
+    infoKey: '', timer: null, flushing: false, sending: null, sendingOps: [],
     loadSeq: 0, commitSeq: 0, polling: false, listDirty: false, flash: {}
   };
 
@@ -4323,7 +4323,7 @@
     // まだ送っていない同じマスの操作があれば、1つにまとめる（〇△／を続けてタップしたときに送る回数を減らす）
     for (var i = progQueue.length - 1; i >= 0; i--) {
       var q = progQueue[i];
-      if (q === prog.sending) break;
+      if (q === prog.sending || prog.sendingOps.indexOf(q) !== -1) break; // 送っている最中の操作には混ぜない
       if (q.kind !== kind || q.payload.dateKey !== payload.dateKey || q.payload.slot !== payload.slot) continue;
       if (kind === 'row' && q.payload.target !== payload.target) continue;
       if (q.payload.remove || payload.remove) break;
@@ -4345,13 +4345,16 @@
     return !!err && (err.code === 'CONFLICT' || err.conflict === true || String(err.message || err.error || '').indexOf('先に書き換えられていました') !== -1);
   }
 
+  var PROG_BATCH_MAX = 60; // マスの保存を1回でまとめて送る数（サーバーの PROGRAM_BATCH_MAX と同じ）
+
   function progFlush() {
     if (prog.flushing || !progQueue.length || !me) return;
     if (navigator.onLine === false) { setSyncStatus(); return; }
     var op = progQueue[0];
+    if (op.kind === 'row') { progFlushRows(); return; }
     prog.flushing = true;
     prog.sending = op;
-    callServer(op.kind === 'slot' ? 'saveProgramSlot' : 'saveProgramRow', op.payload).then(function (res) {
+    callServer('saveProgramSlot', op.payload).then(function (res) {
       prog.flushing = false; prog.sending = null;
       if (res && res.ok === false) { progOpFailed(op, res); return; }
       var i = progQueue.indexOf(op);
@@ -4370,6 +4373,52 @@
       if (!permanent && op.tries < 5) { progPersist(); setSyncStatus(); return; } // 一時的な失敗とみなして、次の見回りで送り直す
 
       progOpFailed(op, err);
+    });
+  }
+
+  /**
+   * マス（〇△／・理由・メモ・参加プログラム・臨時の追加と削除）の送信待ちを、1回の通信でまとめて送る。
+   * 1マスずつ送ると1回3〜5秒かかり、続けて付けたときに送信待ちが長く残っていたため。
+   * 先頭から続く同じ日のマスの操作を最大 PROG_BATCH_MAX 件。結果は1件ずつ返るので、保存できなかったものだけ知らせる。
+   */
+  function progFlushRows() {
+    var first = progQueue[0], batch = [];
+    for (var i = 0; i < progQueue.length && batch.length < PROG_BATCH_MAX; i++) {
+      var q = progQueue[i];
+      if (q.kind !== 'row' || q.payload.dateKey !== first.payload.dateKey) break;
+      batch.push(q);
+    }
+    prog.flushing = true;
+    prog.sendingOps = batch;
+    var payload = { dateKey: first.payload.dateKey, ops: batch.map(function (q) {
+      var p = q.payload, o = { slot: p.slot, target: p.target, fields: p.fields || {} };
+      if (p.remove) o.remove = true;
+      if (p.memoBase !== undefined) o.memoBase = p.memoBase;
+      return o;
+    }) };
+    callServer('saveProgramRows', payload).then(function (res) {
+      prog.flushing = false; prog.sendingOps = [];
+      if (res && res.ok === false) { batch.forEach(function (op) { progOpFailed(op, res); }); return; }
+      var results = (res && res.results) || [];
+      batch.forEach(function (op, i) {
+        var r = results[i] || { ok: false, error: '保存できませんでした。もう一度付け直してください。' };
+        if (r.ok === false) { progOpFailed(op, r); return; }
+        var j = progQueue.indexOf(op);
+        if (j !== -1) progQueue.splice(j, 1);
+        progCommit(op, r);
+      });
+      progPersist();
+      setSyncStatus();
+      renderProgram();
+      progFlush();
+    }).catch(function (err) {
+      prog.flushing = false; prog.sendingOps = [];
+      if (err && (err.isNetwork || err.isTimeout)) { setSyncStatus(); return; } // 次の見回りで送り直す（同じ内容を送り直しても結果は同じ）
+      first.tries = (first.tries || 0) + 1;
+      var permanent = (err && (err.code === 'INVALID' || err.code === 'FORBIDDEN')) || isPermanentError_(err) ||
+        /正しくありません|できません|見るだけ|指定されていません|ありません/.test(String((err && err.message) || ''));
+      if (!permanent && first.tries < 5) { progPersist(); setSyncStatus(); return; } // 一時的な失敗とみなして、次の見回りで送り直す
+      batch.forEach(function (op) { progOpFailed(op, err); });
     });
   }
 
@@ -4468,7 +4517,8 @@
     prog.timer = setInterval(function () {
       if (document.visibilityState !== 'visible' || appMode !== 'prog') return;
       progFlush();
-      if (navigator.onLine !== false) progLoad(false).catch(function () { /* 次の見回りで */ });
+      // 自分の送信待ちがある間は読み直さない（送信と読み込みがサーバーで重なって遅くなるため。送り終われば次の見回りで読む）
+      if (navigator.onLine !== false && !progQueue.length && !prog.flushing) progLoad(false).catch(function () { /* 次の見回りで */ });
     }, PROG_POLL_MS);
   }
   function progStopPolling() { if (prog.timer) { clearInterval(prog.timer); prog.timer = null; } }
