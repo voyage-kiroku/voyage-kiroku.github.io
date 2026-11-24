@@ -986,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwolra7h';
+  var APP_BUILD = 'mwu9lwcf';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -5644,7 +5644,8 @@
     progLoad(true).catch(function () { /* 読み直せなければ、手元の内容で書き出す */ }).then(function () {
       var v = progView(), dk = prog.dateKey || viewDateKey;
       function cell(x) { x = String(x == null ? '' : x); return /[",\r\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }
-      var lines = [['日付', '枠', 'プログラム名', '利用者ID', '利用者名', '臨時', '出欠', '理由'].join(',')];
+      // 2026-11-24：いちばん右に「担当職員」（枠の担当職員を「・」区切りのまま。空欄の枠は空欄）。前からの列の順番・内容は変えない
+      var lines = [['日付', '枠', 'プログラム名', '利用者ID', '利用者名', '臨時', '出欠', '理由', '担当職員'].join(',')];
       var missing = { AM: 0, PM: 0 }; // 選択制で、〇・△なのにプログラムを選んでいない人
       ['AM', 'PM'].forEach(function (slot) {
         var s = v.slots[slot] || emptySlot();
@@ -5655,7 +5656,7 @@
           var m = /^(\d+)[\s　]*(.*)$/.exec(String(name).trim());
           // プログラム名：選択制で選んでいれば選んだプログラム、それ以外は枠のプログラム名（選択制なら「1/2」）
           lines.push([dk.replace(/-/g, ''), slot, progNameFor(s, r), m ? m[1] : '', (m ? m[2] : String(name)).trim(),
-            r.temp ? 'TRUE' : 'FALSE', r.mark || '', r.reason || ''].map(cell).join(','));
+            r.temp ? 'TRUE' : 'FALSE', r.mark || '', r.reason || '', (s.staff || []).join('・')].map(cell).join(','));
         });
       });
       if (lines.length === 1) { showToast('この日の参加記録がありません'); return; }
