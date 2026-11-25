@@ -831,7 +831,7 @@
       <div class="pg-main">
         <div class="pg-summary" id="pgSummary"></div>
         <div class="pg-list" id="pgList"></div>
-        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の右に理由のボタンが出るので、あとから選べます（遅刻・早退・その他は内容を書く欄が開きます）。名前のところをタップすると、様子・対応を書けます。</p>
+        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の右に理由のボタンが出るので、あとから選べます（遅刻・早退・その他を選ぶと様子・対応の欄が開くので、内容もそこに書きます）。名前のところをタップすると、様子・対応を書けます。</p>
         <div class="pg-card">
           <div class="pg-review-head"><label class="hint" for="pgReview">振り返り（内容・様子など）</label><span class="pg-review-who" id="pgReviewWho"></span></div>
           <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
@@ -986,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwu9lwcf';
+  var APP_BUILD = 'mwvuz57j';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -4635,8 +4635,9 @@
     var k = progKey(prog.slot, name), open = prog.open === name;
     var choiceMode = progIsChoice(s);
     // 1段目の右：選択制ならプログラムのボタン（／は欠席の理由）、そうでなければ△／の理由
-    var inline1 = choiceMode ? (r.mark === '／' ? (open ? '' : progInlineReasonsHtml(r)) : progChoiceHtml(s, r)) : (open ? '' : progInlineReasonsHtml(r));
-    var line2 = (choiceMode && r.mark === '△' && !open) ? progReasonLine2Html(r) : '';
+    // 理由のボタンは、行を開いているときも同じ場所に出す（開いた中に別の理由の欄は出さない）
+    var inline1 = choiceMode ? (r.mark === '／' ? progInlineReasonsHtml(r) : progChoiceHtml(s, r)) : progInlineReasonsHtml(r);
+    var line2 = (choiceMode && r.mark === '△') ? progReasonLine2Html(r) : '';
     var draft = prog.drafts[k] || {};
     var whoCls = 'pg-who' + (r._pending ? ' pg-sending' : '');
     var who = r._pending ? '送信待ち' : (r.by ? escapeHtml(r.by) + (r.at ? ' ' + escapeHtml(r.at) : '') : '');
@@ -4653,20 +4654,11 @@
       if (base !== undefined && !r._pending && r.memo !== base) {
         html += '<p class="pg-remote">別の端末でメモが書き換えられました（' + escapeHtml(r.by || '') + '）。このまま保存すると、保存できない旨のお知らせが出ます。いったん閉じて開き直すと最新の内容から書けます。</p>';
       }
-      if (r.mark === '△' || r.mark === '／') {
-        html += '<div class="pg-reason"><div class="pg-ttl">' + (r.mark === '△' ? '遅刻・早退' : '欠席の理由') + '</div><div class="pg-chips">' +
-          PROG_REASONS[r.mark].map(function (x) {
-            return '<button type="button" class="pg-chip" data-reason="' + x + '" aria-pressed="' + (r.reason === x) + '">' + x + '</button>';
-          }).join('') + '</div>';
-        if (progNeedsText(r.mark, r.reason)) {
-          var rt = draft.reasonText !== undefined ? draft.reasonText : r.reasonText;
-          html += '<input type="text" class="pg-input pg-reason-text" value="' + escapeHtml(rt) + '" placeholder="' +
-            (r.mark === '△' ? '内容（例：10時から参加、11時に帰宅）' : 'その他の理由') + '">';
-        }
-        html += '</div>';
-      }
+      // 遅刻・早退の内容や「その他」の理由も、様子・対応の欄にまとめて書く（2026-11-25：別の記入欄をやめた）
       var memo = draft.memo !== undefined ? draft.memo : r.memo;
-      html += '<textarea class="pg-memo" placeholder="様子・対応">' + escapeHtml(memo) + '</textarea>' +
+      var ph = r.mark === '△' ? (r.reason ? r.reason + 'の内容（例：10時から参加、11時に帰宅）や、様子・対応' : '遅刻・早退の内容や、様子・対応')
+        : (r.mark === '／' && r.reason === 'その他') ? '欠席の理由（その他）や、様子・対応' : '様子・対応';
+      html += '<textarea class="pg-memo" placeholder="' + ph + '">' + escapeHtml(memo) + '</textarea>' +
         '<div class="pg-actions">' + (r.temp ? '<button type="button" class="pg-btn danger" data-act="remove">この参加者を外す</button>' : '<span></span>') +
         '<div class="pg-right"><button type="button" class="pg-btn" data-act="close">閉じる</button><button type="button" class="pg-btn primary" data-act="save">保存</button></div></div>';
       html += '</div>';
@@ -5159,10 +5151,10 @@
         var fields = { reason: reason };
         if (!progNeedsText(r.mark, reason)) { fields.reasonText = ''; if (prog.drafts[k]) delete prog.drafts[k].reasonText; }
         progEnqueue('row', { slot: prog.slot, target: name, fields: fields });
-        if (reason && progNeedsText(r.mark, reason) && prog.open !== name) progOpenRow(name); // 内容を書く欄が要る理由だけ開く
+        if (reason && progNeedsText(r.mark, reason) && prog.open !== name) progOpenRow(name); // 内容を書く理由（遅刻・早退・その他）は、様子・対応の欄を開く
         renderProgram();
-        var t = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(name) + '"] .pg-reason-text');
-        if (t && reason && !t.value) t.focus();
+        var t = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(name) + '"] .pg-memo');
+        if (t && reason && progNeedsText(r.mark, reason)) { autoGrow(t); if (!t.value) t.focus(); }
         return;
       }
       if (act) {
