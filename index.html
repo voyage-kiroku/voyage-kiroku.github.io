@@ -831,7 +831,7 @@
       <div class="pg-main">
         <div class="pg-summary" id="pgSummary"></div>
         <div class="pg-list" id="pgList"></div>
-        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の右に理由のボタンが出るので、あとから選べます（遅刻・早退・その他を選ぶと様子・対応の欄が開くので、内容もそこに書きます）。名前のところをタップすると、様子・対応を書けます。</p>
+        <p class="pg-note">左のマスをタップするたびに 〇参加 → △遅刻・早退 → ／欠席 → 空 と変わります。△と／では名前の右に理由のボタンが出るので、あとから選べます（遅刻・早退・その他の内容は、名前のところをタップして様子・対応の欄に書きます）。名前のところをタップすると、様子・対応を書けます。</p>
         <div class="pg-card">
           <div class="pg-review-head"><label class="hint" for="pgReview">振り返り（内容・様子など）</label><span class="pg-review-who" id="pgReviewWho"></span></div>
           <textarea id="pgReview" placeholder="プログラム全体の振り返り"></textarea>
@@ -986,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwvuz57j';
+  var APP_BUILD = 'mwvvcul7';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -5151,10 +5151,8 @@
         var fields = { reason: reason };
         if (!progNeedsText(r.mark, reason)) { fields.reasonText = ''; if (prog.drafts[k]) delete prog.drafts[k].reasonText; }
         progEnqueue('row', { slot: prog.slot, target: name, fields: fields });
-        if (reason && progNeedsText(r.mark, reason) && prog.open !== name) progOpenRow(name); // 内容を書く理由（遅刻・早退・その他）は、様子・対応の欄を開く
+        // 理由を選んでも欄は自動で開かない（2026-11-25：内容は、あとで名前の部分をタップして様子・対応の欄に書く）
         renderProgram();
-        var t = el.pgList.querySelector('.pg-row[data-name="' + cssEscape(name) + '"] .pg-memo');
-        if (t && reason && progNeedsText(r.mark, reason)) { autoGrow(t); if (!t.value) t.focus(); }
         return;
       }
       if (act) {
