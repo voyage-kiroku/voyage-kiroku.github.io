@@ -986,7 +986,7 @@
   var CALL_TIMEOUT_MS = 40000; // Apps Script側の応答が遅いことがあるため、短すぎる誤判定を避ける
   // 画像の記録はアプリ版（PWA）だけで使う（画像の送受信は受付窓口経由のため。Googleログイン版では表示のみの案内）
   var ENABLE_IMAGES = true;
-  var APP_BUILD = 'mwvvcul7';
+  var APP_BUILD = 'mwy7hpxa';
   var ENABLE_CSV_EXPORT = true; // 福祉見聞録へのCSV書き出し（アプリ版だけ true。mkpwa.js が置き換える）
   var MAX_IMAGES = 4;
   var IMAGE_MAX_SIDE = 1600;     // 送る画像の長い辺（px）
@@ -2783,6 +2783,8 @@
   }
 
   function renderComposeTags() {
+    // 入力欄の「朝MTG」タグは朝MTGモードだけで決める（起動直後・書きかけを戻したとき・タグ一覧の読み込み後もずれないように）
+    applyMtgTag(mtgTagAvailable() && mtgMode.on);
     el.tagBox.hidden = tagList.length === 0;
     renderTagButtons(el.tagRow, composeTags, function () { updateAutoCaseOption(el.caseSelect, composeTags); }, true);
     updateAutoCaseOption(el.caseSelect, composeTags);
@@ -2934,12 +2936,10 @@
     // 小窓など、別のウィンドウで切り替えたときも合わせる
     window.addEventListener('storage', function (e) {
       if (e.key !== MTG_MODE_KEY) return;
-      var was = mtgMode.on;
       loadMtgMode();
-      if (was !== mtgMode.on) applyMtgTag(mtgMode.on);
       renderComposeTags();
     });
-    updateMtgModeUI();
+    renderComposeTags(); // 記憶していたモードを入力欄のタグにも反映する（ボタンだけ「朝MTG中」になるのを防ぐ）
   }
 
   // ---------- 並び順（古い順／新しい順。日ごと・絞り込みの両方。端末ごとに記憶） ----------
